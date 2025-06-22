@@ -54,6 +54,9 @@ export default function Dashboard({ setPage, setSelectedTask }) {
   const [dailyHours, setDailyHours] = useState("");
   const [estimatedFinish, setEstimatedFinish] = useState("");
   const [deadline, setDeadline] = useState("");
+  const [dailyMinutes, setDailyMinutes] = useState("");
+
+  const today = new Date().toISOString().split("T")[0];
 
   // view toggle
   const [viewMode, setViewMode] = useState("label");
@@ -78,6 +81,7 @@ export default function Dashboard({ setPage, setSelectedTask }) {
         labelName,
         labelColor,
         dailyHours: dailyHours || null,
+        dailyMinutes: dailyMinutes || null,
         estimatedFinish: estimatedFinish || null,
         deadline: deadline || null,
       },
@@ -88,6 +92,7 @@ export default function Dashboard({ setPage, setSelectedTask }) {
     setLabelName("");
     setLabelColor("#34D399");
     setDailyHours("");
+    setDailyMinutes("");
     setEstimatedFinish("");
     setDeadline("");
   };
@@ -187,9 +192,11 @@ export default function Dashboard({ setPage, setSelectedTask }) {
                   </h3>
                   <p className="text-base mb-6 flex-1">{t.description}</p>
                   <div className="border-t border-white/20 pt-4 text-sm space-y-2 mb-6 opacity-80">
-                    {t.dailyHours && (
+                    {(t.dailyHours || t.dailyMinutes) && (
                       <div>
-                        <strong>Hours/Day:</strong> {t.dailyHours}
+                        <strong>Time/Day: </strong>
+                        {t.dailyHours ? `${t.dailyHours}h` : ""}
+                        {t.dailyMinutes ? ` ${t.dailyMinutes}m` : ""}
                       </div>
                     )}
                     {t.estimatedFinish && (
@@ -283,16 +290,27 @@ export default function Dashboard({ setPage, setSelectedTask }) {
                 min="0"
               />
               <input
+                type="number"
+                value={dailyMinutes}
+                onChange={(e) => setDailyMinutes(e.target.value)}
+                placeholder="Minutes/Day (optional)"
+                className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500 w-full"
+                min="0"
+                max="59"
+              />
+              <input
                 type="date"
                 value={estimatedFinish}
                 onChange={(e) => setEstimatedFinish(e.target.value)}
                 className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500 w-full"
+                min={today}
               />
               <input
                 type="date"
                 value={deadline}
                 onChange={(e) => setDeadline(e.target.value)}
                 className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500 w-full"
+                min={today}
               />
             </div>
 
@@ -333,9 +351,11 @@ export default function Dashboard({ setPage, setSelectedTask }) {
                   <strong>Label:</strong> {modalTask.labelName}
                 </p>
               )}
-              {modalTask.dailyHours && (
+              {(modalTask.dailyHours || modalTask.dailyMinutes) && (
                 <p>
-                  <strong>Hours/Day:</strong> {modalTask.dailyHours}
+                  <strong>Time/Day: </strong>
+                  {modalTask.dailyHours ? `${modalTask.dailyHours}h` : ""}
+                  {modalTask.dailyMinutes ? ` ${modalTask.dailyMinutes}m` : ""}
                 </p>
               )}
               {modalTask.estimatedFinish && (

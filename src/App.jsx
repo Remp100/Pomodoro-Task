@@ -31,7 +31,7 @@ function Navbar({ page, setPage }) {
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
-    <header className="max-w-6xl mx-auto bg-white/90 dark:bg-gray-800/90 backdrop-blur shadow sticky top-[3px] z-50 rounded-2xl">
+    <header className="max-w-6xl mx-auto bg-gray-800/90 backdrop-blur shadow sticky top-[3px] z-50 rounded-2xl">
       <div className="w-full flex flex-col py-4 px-6">
         <div className="relative flex items-center w-full py-5">
           <h1 className="absolute left-1/2 transform -translate-x-1/2 text-2xl font-extrabold">
@@ -47,7 +47,7 @@ function Navbar({ page, setPage }) {
                 `flex items-center space-x-2 py-2 px-4 rounded-full transition-all duration-200 ` +
                 (page === key
                   ? "bg-blue-500 text-white shadow-lg"
-                  : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600")
+                  : "bg-gray-100 bg-gray-700 text-white-700  hover:bg-gray-200 hover:bg-gray-600")
               }
             >
               <span className="text-lg">{emoji}</span>
@@ -56,7 +56,7 @@ function Navbar({ page, setPage }) {
           ))}
           <button
             onClick={() => setMenuOpen((prev) => !prev)}
-            className="md:hidden flex items-center justify-center w-10 h-10 rounded-full bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition"
+            className="md:hidden flex items-center justify-center w-10 h-10 rounded-full bg-gray-100 bg-gray-700 hover:bg-gray-200 hover:bg-gray-600 transition"
             aria-label="Toggle Menu"
           >
             <span className="text-2xl">{menuOpen ? "✕" : "☰"}</span>
@@ -75,7 +75,7 @@ function Navbar({ page, setPage }) {
                   `flex items-center space-x-2 py-2 px-4 rounded-full transition-all duration-200 ` +
                   (page === key
                     ? "bg-blue-500 text-white"
-                    : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600")
+                    : "bg-gray-100 bg-gray-700 text-gray-700 text-gray-300 hover:bg-gray-200 hover:bg-gray-600")
                 }
               >
                 <span className="text-lg">{emoji}</span>
@@ -96,7 +96,7 @@ export default function App() {
   const [selectedTask, setSelectedTask] = useLocalStorage("selectedTask", null);
 
   return (
-    <div className="min-h-screen bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+    <div className="min-h-screen bg-white bg-gray-900 text-gray-900 text-gray-100">
       <Navbar page={page} setPage={setPage} />
       <main className="py-8 px-6 max-w-6xl mx-auto space-y-8">
         {page === "dashboard" && (
