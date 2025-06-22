@@ -4,16 +4,35 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Pomodoro Task Manager</title>
-    <script>
-      tailwind.config = {
-        darkMode: "class",
-        content: ["./index.html", "./src/**/*.{js,jsx,ts,tsx}"],
-      };
-    </script>
+
+    <!-- Cross-Origin Opener Policy pentru rezolvarea erorii la login Google -->
+    <meta http-equiv="Cross-Origin-Embedder-Policy" content="unsafe-none" />
+
+    <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Google Identity Services -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+
+    <!-- CSP actualizat pentru a permite resursele necesare Google -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="
+        default-src 'self';
+        script-src 'self' 'unsafe-inline' 'unsafe-eval' https://apis.google.com https://accounts.google.com https://www.gstatic.com;
+        script-src-elem 'self' 'unsafe-inline' https://apis.google.com https://accounts.google.com https://www.gstatic.com;
+        connect-src 'self' https://www.googleapis.com https://accounts.google.com;
+        frame-src https://accounts.google.com https://content.googleapis.com;
+        style-src 'self' 'unsafe-inline';
+        img-src 'self' data:;
+      "
+    />
   </head>
-  <body class="bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+
+  <body class="bg-white text-gray-900">
     <div id="root"></div>
+
+    <!-- React entry point -->
     <script type="module" src="/src/index.jsx"></script>
   </body>
 </html>
