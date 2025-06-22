@@ -73,6 +73,49 @@ function usePomodoro({ work, shortBreak, longBreak }, onSessionEnd) {
   return { mode, timeLeft, start, pause, reset, setMode };
 }
 
+// Hook for persisting and retrieving task progress per day/task
+function useTaskProgress(selectedTask) {
+  const today = new Date().toISOString().slice(0, 10);
+  const storageKey = selectedTask ? `taskProgress-${selectedTask.id}` : null;
+
+  const getInitial = () => {
+    if (!selectedTask) return { date: today, task: null, workedSec: 0 };
+    const raw = localStorage.getItem(storageKey);
+    if (raw) {
+      try {
+        const obj = JSON.parse(raw);
+        if (obj.date === today) return obj;
+      } catch {}
+    }
+    return { date: today, task: selectedTask, workedSec: 0 };
+  };
+
+  const [progress, setProgress] = useState(getInitial);
+
+  // Reset when task or date changes
+  useEffect(() => {
+    setProgress(getInitial());
+  }, [storageKey, today]);
+
+  // Persist on every change
+  useEffect(() => {
+    if (!storageKey) return;
+    localStorage.setItem(storageKey, JSON.stringify(progress));
+  }, [progress, storageKey]);
+
+  // Persist before unload
+  useEffect(() => {
+    if (!storageKey) return;
+    const onUnload = () => {
+      localStorage.setItem(storageKey, JSON.stringify(progress));
+    };
+    window.addEventListener("beforeunload", onUnload);
+    return () => window.removeEventListener("beforeunload", onUnload);
+  }, [progress, storageKey]);
+
+  return [progress, setProgress];
+}
+
 export default function Pomodoro({ selectedTask, setPage }) {
   // --- Pomodoro state + persistence ---
   const [stored, setStored] = useLocalStorage("pomodoro", {
@@ -105,6 +148,28 @@ export default function Pomodoro({ selectedTask, setPage }) {
   const minutes = String(Math.floor(timeLeft / 60)).padStart(2, "0");
   const seconds = String(timeLeft % 60).padStart(2, "0");
 
+  // --- Task progress persistence via custom hook ---
+  const [taskProgress, setTaskProgress] = useTaskProgress(selectedTask);
+
+  // count each second in work mode
+  const prevTimeRef = useRef(timeLeft);
+  useEffect(() => {
+    if (mode === "work" && prevTimeRef.current > timeLeft && selectedTask) {
+      setTaskProgress((tp) => ({
+        ...tp,
+        workedSec: tp.workedSec + 1,
+      }));
+    }
+    prevTimeRef.current = timeLeft;
+  }, [timeLeft, mode, selectedTask, setTaskProgress]);
+
+  const daily = selectedTask?.dailyHours || 0;
+  const pct =
+    daily > 0
+      ? Math.min((taskProgress.workedSec / (daily * 3600)) * 100, 100)
+      : 0;
+  const doneH = (taskProgress.workedSec / 3600).toFixed(2);
+
   // --- Settings form state ---
   const [form, setForm] = useState({
     work: state.work,
@@ -123,61 +188,10 @@ export default function Pomodoro({ selectedTask, setPage }) {
     dispatch({ type: "SETTINGS", payload: form });
   };
 
-  // === Task progress persistence ===
-  const today = new Date().toISOString().slice(0, 10);
-  const [taskProgress, setTaskProgress] = useState({
-    date: today,
-    task: null,
-    workedSec: 0,
-  });
-
-  // load progress when a new task is selected
-  useEffect(() => {
-    if (!selectedTask) return;
-    let initial = { date: today, task: selectedTask, workedSec: 0 };
-    try {
-      const raw = localStorage.getItem("taskProgress");
-      if (raw) {
-        const obj = JSON.parse(raw);
-        if (obj.date === today && obj.task?.id === selectedTask.id) {
-          initial = obj;
-        }
-      }
-    } catch {}
-    setTaskProgress(initial);
-  }, [selectedTask, today]);
-
-  // persist progress whenever it changes
-  useEffect(() => {
-    if (!selectedTask) return;
-    localStorage.setItem("taskProgress", JSON.stringify(taskProgress));
-  }, [taskProgress, selectedTask]);
-
-  // count each second in work mode
-  const prevTimeRef = useRef(timeLeft);
-  useEffect(() => {
-    if (mode === "work" && prevTimeRef.current > timeLeft && selectedTask) {
-      setTaskProgress((tp) => ({
-        ...tp,
-        workedSec: tp.workedSec + 1,
-      }));
-    }
-    prevTimeRef.current = timeLeft;
-  }, [timeLeft, mode, selectedTask]);
-
-  // derive progress percent and hours done
-  const daily = selectedTask?.dailyHours || 0;
-  const pct =
-    daily > 0
-      ? Math.min((taskProgress.workedSec / (daily * 3600)) * 100, 100)
-      : 0;
-  const doneH = (taskProgress.workedSec / 3600).toFixed(2);
-  // === end task-progress code ===
-
   return (
     <div className="container mx-auto py-8">
-      <div className="grid grid-cols-1 md:grid-cols-2  gap-8">
-        {/* ==== Pomodoro Timer Card ==== */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        {/* Pomodoro Timer Card */}
         <div className="md:col-start-1 md:row-span-2 bg-gradient-to-br from-gray-800 to-gray-900 rounded-3xl shadow-2xl overflow-hidden">
           <div className="h-1 bg-indigo-500" />
           <div className="px-6 py-4 border-b border-gray-700">
@@ -186,7 +200,6 @@ export default function Pomodoro({ selectedTask, setPage }) {
             </h2>
           </div>
           <div className="p-8 space-y-6">
-            {/* Timer display */}
             <div className="text-center space-y-2">
               <div className="text-7xl font-mono text-white">
                 {minutes}:{seconds}
@@ -195,8 +208,6 @@ export default function Pomodoro({ selectedTask, setPage }) {
                 {mode === "work" ? "Work" : "Break"}
               </div>
             </div>
-
-            {/* Mode tabs */}
             <div className="flex justify-center space-x-4">
               {["work", "shortBreak", "longBreak"].map((m) => (
                 <button
@@ -219,8 +230,6 @@ export default function Pomodoro({ selectedTask, setPage }) {
                 </button>
               ))}
             </div>
-
-            {/* Controls */}
             <div className="flex justify-center space-x-4">
               <button
                 onClick={start}
@@ -241,8 +250,6 @@ export default function Pomodoro({ selectedTask, setPage }) {
                 Reset
               </button>
             </div>
-
-            {/* Session History */}
             <div className="space-y-2">
               <h3 className="text-lg font-semibold text-white">
                 Session History
@@ -263,17 +270,9 @@ export default function Pomodoro({ selectedTask, setPage }) {
           </div>
         </div>
 
-        {/* ==== Task Details & Progress ==== */}
+        {/* Task Details & Progress */}
         {selectedTask && (
-          <div
-            className="
-            md:col-start-2 md:row-start-1
-            bg-gray-800 rounded-2xl shadow-lg
-            p-4                /* reduced padding */
-            text-white space-y-4
-            max-h-64          /* max height */
-          "
-          >
+          <div className="md:col-start-2 md:row-start-1 bg-gray-800 rounded-2xl shadow-lg p-4 text-white space-y-4 max-h-64">
             <h3 className="text-2xl font-bold">{selectedTask.title}</h3>
             <p>{selectedTask.description}</p>
             {selectedTask.labelName && (
@@ -309,7 +308,7 @@ export default function Pomodoro({ selectedTask, setPage }) {
           </div>
         )}
 
-        {/* ==== Settings Card ==== */}
+        {/* Settings Card */}
         <div className="md:col-start-2 md:row-start-2 bg-gradient-to-br from-gray-800 to-gray-900 rounded-3xl shadow-2xl overflow-hidden">
           <div className="h-1 bg-indigo-500" />
           <div className="px-6 py-4 border-b border-gray-700">
