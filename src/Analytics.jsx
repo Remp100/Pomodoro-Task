@@ -14,7 +14,7 @@ export default function Analytics() {
   }, {});
 
   return (
-    <div>
+    <div className="container bg-gray-900">
       <h2 className="text-xl font-semibold mb-4">Analytics</h2>
       <div className="grid grid-cols-7 gap-1">
         {Object.entries(sessionsByDay).map(([day, count]) => (

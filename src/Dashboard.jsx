@@ -40,7 +40,7 @@ function getDeadlineColor(deadline) {
   return "#34D399";
 }
 
-export default function Dashboard({ setPage }) {
+export default function Dashboard({ setPage, setSelectedTask }) {
   // tasks state
   const [storedTasks, setStoredTasks] = useLocalStorage("tasks", []);
   const [tasks, dispatch] = useReducer(taskReducer, storedTasks);
@@ -119,7 +119,7 @@ export default function Dashboard({ setPage }) {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900">
+    <div className="container bg-gray-900">
       <div className="container mx-auto py-8 space-y-8">
         {/* Toolbar */}
         <div className="flex justify-between items-center">
@@ -213,7 +213,10 @@ export default function Dashboard({ setPage }) {
                       View
                     </button>
                     <button
-                      onClick={startTask}
+                      onClick={() => {
+                        setSelectedTask(t);
+                        setPage("pomodoro");
+                      }}
                       className="px-4 py-2 bg-green-400 hover:bg-green-500 rounded-lg text-sm transition"
                     >
                       Start
@@ -357,7 +360,8 @@ export default function Dashboard({ setPage }) {
               </button>
               <button
                 onClick={() => {
-                  startTask();
+                  setSelectedTask(modalTask);
+                  setPage("pomodoro");
                   setModalTask(null);
                 }}
                 className="px-3 py-1 bg-green-400 text-white rounded-lg hover:bg-green-500 transition"
