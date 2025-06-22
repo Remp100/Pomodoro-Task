@@ -1,22 +1,26 @@
 import React, { useReducer, useState, useRef, useEffect } from "react";
 
-// useLocalStorage Hook integrated into file
+// Hook for syncing with localStorage
 function useLocalStorage(key, initialValue) {
   const [value, setValue] = useState(() => {
     const stored = localStorage.getItem(key);
     return stored ? JSON.parse(stored) : initialValue;
   });
+
   useEffect(() => {
     localStorage.setItem(key, JSON.stringify(value));
   }, [key, value]);
+
   return [value, setValue];
 }
 
-// Reducer for Tasks
+// Reducer for managing tasks
 function taskReducer(state, action) {
   switch (action.type) {
     case "ADD":
       return [...state, action.payload];
+    case "REMOVE":
+      return state.filter((task) => task.id !== action.payload);
     case "REORDER":
       return action.payload;
     default:
@@ -24,23 +28,81 @@ function taskReducer(state, action) {
   }
 }
 
-export default function Dashboard() {
+// Helper for background color based on deadline proximity
+function getDeadlineColor(deadline) {
+  if (!deadline) return "#4B5563";
+  const now = new Date();
+  const dl = new Date(deadline);
+  const diffDays = (dl - now) / (1000 * 60 * 60 * 24);
+  if (dl < now) return "#B91C1C";
+  if (diffDays <= 1) return "#F87171";
+  if (diffDays <= 3) return "#FBBF24";
+  return "#34D399";
+}
+
+export default function Dashboard({ setPage }) {
+  // tasks state
   const [storedTasks, setStoredTasks] = useLocalStorage("tasks", []);
   const [tasks, dispatch] = useReducer(taskReducer, storedTasks);
   useEffect(() => setStoredTasks(tasks), [tasks]);
 
+  // form fields
   const [title, setTitle] = useState("");
-  const [desc, setDesc] = useState("");
+  const [description, setDescription] = useState("");
+  const [labelName, setLabelName] = useState("");
+  const [labelColor, setLabelColor] = useState("#34D399");
+  const [dailyHours, setDailyHours] = useState("");
+  const [estimatedFinish, setEstimatedFinish] = useState("");
+  const [deadline, setDeadline] = useState("");
+
+  // view toggle
+  const [viewMode, setViewMode] = useState("label");
+  // modal for viewing a task
+  const [modalTask, setModalTask] = useState(null);
+  // modal for creating a task
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+
+  // drag & drop
   const dragItem = useRef();
   const dragOverItem = useRef();
 
+  // add new task
   const addTask = () => {
     if (!title.trim()) return;
-    dispatch({ type: "ADD", payload: { id: Date.now(), title, desc } });
+    dispatch({
+      type: "ADD",
+      payload: {
+        id: Date.now(),
+        title,
+        description,
+        labelName,
+        labelColor,
+        dailyHours: dailyHours || null,
+        estimatedFinish: estimatedFinish || null,
+        deadline: deadline || null,
+      },
+    });
+    // reset form
     setTitle("");
-    setDesc("");
+    setDescription("");
+    setLabelName("");
+    setLabelColor("#34D399");
+    setDailyHours("");
+    setEstimatedFinish("");
+    setDeadline("");
   };
 
+  // remove a task
+  const removeTask = (id) => {
+    dispatch({ type: "REMOVE", payload: id });
+  };
+
+  // start a task → navigate to Pomodoro
+  const startTask = () => {
+    setPage("pomodoro");
+  };
+
+  // drag handlers
   const onDragStart = (_, index) => {
     dragItem.current = index;
   };
@@ -49,51 +111,272 @@ export default function Dashboard() {
   };
   const onDragEnd = () => {
     const list = Array.from(tasks);
-    const item = list.splice(dragItem.current, 1)[0];
-    list.splice(dragOverItem.current, 0, item);
+    const dragged = list.splice(dragItem.current, 1)[0];
+    list.splice(dragOverItem.current, 0, dragged);
     dispatch({ type: "REORDER", payload: list });
     dragItem.current = null;
     dragOverItem.current = null;
   };
 
   return (
-    <div>
-      <h2 className="text-xl font-semibold mb-4">Dashboard</h2>
-      <div className="mb-4 space-y-2">
-        <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="Titlu"
-          className="border p-2 w-full"
-        />
-        <textarea
-          value={desc}
-          onChange={(e) => setDesc(e.target.value)}
-          placeholder="Descriere"
-          className="border p-2 w-full"
-        />
-        <button
-          onClick={addTask}
-          className="px-4 py-2 bg-blue-600 text-white rounded"
-        >
-          Adaugă Task
-        </button>
-      </div>
-      <ul>
-        {tasks.map((t, idx) => (
-          <li
-            key={t.id}
-            draggable
-            onDragStart={(e) => onDragStart(e, idx)}
-            onDragEnter={(e) => onDragEnter(e, idx)}
-            onDragEnd={onDragEnd}
-            className="p-4 mb-2 border rounded bg-gray-50 dark:bg-gray-800"
+    <div className="min-h-screen bg-gray-900">
+      <div className="container mx-auto py-8 space-y-8">
+        {/* Toolbar */}
+        <div className="flex justify-between items-center">
+          <div>
+            <button
+              onClick={() => setViewMode("label")}
+              className={`px-4 py-2 rounded-full transition ${
+                viewMode === "label"
+                  ? "bg-blue-600 text-white"
+                  : "bg-gray-700 text-gray-300"
+              }`}
+            >
+              Show Label
+            </button>
+            <button
+              onClick={() => setViewMode("deadline")}
+              className={`ml-2 px-4 py-2 rounded-full transition ${
+                viewMode === "deadline"
+                  ? "bg-blue-600 text-white"
+                  : "bg-gray-700 text-gray-300"
+              }`}
+            >
+              Show Deadline
+            </button>
+          </div>
+          <button
+            onClick={() => setIsCreateOpen(true)}
+            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition"
           >
-            <h3 className="font-bold">{t.title}</h3>
-            <p>{t.desc}</p>
-          </li>
-        ))}
-      </ul>
+            + New Task
+          </button>
+        </div>
+
+        {/* Tasks Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {tasks.length > 0 ? (
+            tasks.map((t, idx) => {
+              const bg =
+                viewMode === "label"
+                  ? t.labelColor
+                  : getDeadlineColor(t.deadline);
+              return (
+                <div
+                  key={t.id}
+                  draggable
+                  onDragStart={(e) => onDragStart(e, idx)}
+                  onDragEnter={(e) => onDragEnter(e, idx)}
+                  onDragEnd={onDragEnd}
+                  style={{ backgroundColor: bg }}
+                  className="p-6 rounded-2xl text-white cursor-move shadow-lg flex flex-col transition hover:shadow-2xl"
+                >
+                  <div className="flex justify-between items-center mb-4">
+                    <span className="font-bold text-xl">#{idx + 1}</span>
+                    {t.labelName && (
+                      <span
+                        className="px-3 py-1 text-xs font-semibold uppercase tracking-wide rounded-full"
+                        style={{ backgroundColor: t.labelColor }}
+                      >
+                        {t.labelName}
+                      </span>
+                    )}
+                  </div>
+                  <h3 className="text-3xl font-extrabold mb-2 leading-tight">
+                    {t.title}
+                  </h3>
+                  <p className="text-base mb-6 flex-1">{t.description}</p>
+                  <div className="border-t border-white/20 pt-4 text-sm space-y-2 mb-6 opacity-80">
+                    {t.dailyHours && (
+                      <div>
+                        <strong>Hours/Day:</strong> {t.dailyHours}
+                      </div>
+                    )}
+                    {t.estimatedFinish && (
+                      <div>
+                        <strong>Est. Finish:</strong>{" "}
+                        {new Date(t.estimatedFinish).toLocaleDateString()}
+                      </div>
+                    )}
+                    {t.deadline && (
+                      <div>
+                        <strong>Deadline:</strong>{" "}
+                        {new Date(t.deadline).toLocaleDateString()}
+                      </div>
+                    )}
+                  </div>
+                  <div className="mt-auto flex justify-end gap-3">
+                    <button
+                      onClick={() => setModalTask(t)}
+                      className="px-4 py-2 bg-white text-gray-800 rounded-lg text-sm transition hover:bg-gray-100"
+                    >
+                      View
+                    </button>
+                    <button
+                      onClick={startTask}
+                      className="px-4 py-2 bg-green-400 hover:bg-green-500 rounded-lg text-sm transition"
+                    >
+                      Start
+                    </button>
+                    <button
+                      onClick={() => removeTask(t.id)}
+                      className="px-4 py-2 bg-red-500 hover:bg-red-600 rounded-lg text-sm transition"
+                    >
+                      End
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+            <p className="col-span-full text-center text-gray-400">
+              No tasks. Add one via “+ New Task”!
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* ==== CREATE TASK MODAL ==== */}
+      {isCreateOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30 backdrop-blur-sm">
+          <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl w-11/12 max-w-lg overflow-hidden">
+            {/* — accent bar removed — */}
+
+            {/* Form contents: single column */}
+            <div className="p-6 grid grid-cols-1 gap-4">
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Title"
+                className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500 w-full"
+              />
+              <input
+                type="text"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Description"
+                className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500 w-full"
+              />
+              <input
+                type="text"
+                value={labelName}
+                onChange={(e) => setLabelName(e.target.value)}
+                placeholder="Label Name"
+                className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500 w-full"
+              />
+              <input
+                type="color"
+                value={labelColor}
+                onChange={(e) => setLabelColor(e.target.value)}
+                className="h-10 rounded-lg border-none w-full"
+              />
+              <input
+                type="number"
+                value={dailyHours}
+                onChange={(e) => setDailyHours(e.target.value)}
+                placeholder="Hours/Day (optional)"
+                className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500 w-full"
+                min="0"
+              />
+              <input
+                type="date"
+                value={estimatedFinish}
+                onChange={(e) => setEstimatedFinish(e.target.value)}
+                className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500 w-full"
+              />
+              <input
+                type="date"
+                value={deadline}
+                onChange={(e) => setDeadline(e.target.value)}
+                className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500 w-full"
+              />
+            </div>
+
+            {/* Action bar */}
+            <div className="border-t border-gray-200 dark:border-gray-700 px-6 py-4 flex justify-between">
+              <button
+                onClick={() => setIsCreateOpen(false)}
+                className="text-white hover:text-white transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  addTask();
+                  setIsCreateOpen(false);
+                }}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition"
+              >
+                Create Task
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ==== VIEW TASK MODAL ==== */}
+      {modalTask && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black bg-opacity-30 backdrop-blur-sm">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg w-11/12 max-w-md overflow-hidden">
+            <div className="p-4 border-b dark:border-gray-700">
+              <h2 className="text-xl font-bold">{modalTask.title}</h2>
+            </div>
+            <div className="p-4 space-y-2 text-gray-800 dark:text-gray-100">
+              <p>
+                <strong>Description:</strong> {modalTask.description}
+              </p>
+              {modalTask.labelName && (
+                <p>
+                  <strong>Label:</strong> {modalTask.labelName}
+                </p>
+              )}
+              {modalTask.dailyHours && (
+                <p>
+                  <strong>Hours/Day:</strong> {modalTask.dailyHours}
+                </p>
+              )}
+              {modalTask.estimatedFinish && (
+                <p>
+                  <strong>Est. Finish:</strong>{" "}
+                  {new Date(modalTask.estimatedFinish).toLocaleDateString()}
+                </p>
+              )}
+              {modalTask.deadline && (
+                <p>
+                  <strong>Deadline:</strong>{" "}
+                  {new Date(modalTask.deadline).toLocaleDateString()}
+                </p>
+              )}
+            </div>
+            <div className="p-4 border-t flex justify-end gap-3 dark:border-gray-700">
+              <button
+                onClick={() => setModalTask(null)}
+                className="px-3 py-1 bg-gray-200 dark:bg-gray-700 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition"
+              >
+                Close
+              </button>
+              <button
+                onClick={() => {
+                  startTask();
+                  setModalTask(null);
+                }}
+                className="px-3 py-1 bg-green-400 text-white rounded-lg hover:bg-green-500 transition"
+              >
+                Start
+              </button>
+              <button
+                onClick={() => {
+                  removeTask(modalTask.id);
+                  setModalTask(null);
+                }}
+                className="px-3 py-1 bg-red-500 text-white rounded-lg hover:bg-red-600 transition"
+              >
+                End
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
