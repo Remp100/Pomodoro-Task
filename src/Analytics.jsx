@@ -1,12 +1,10 @@
 import React, { useState, useEffect, useMemo } from "react";
 
 export default function Analytics() {
-  // 1️⃣ Load sessions + work length from localStorage
   const totalDailyProgress =
     JSON.parse(localStorage.getItem("totalDailyProgress")) || {};
   console.log("[DEBUG] totalDailyProgress:", totalDailyProgress);
 
-  // helper to format YYYY-MM-DD
   const fmt = (d) => {
     const year = d.getFullYear();
     const month = String(d.getMonth() + 1).padStart(2, "0");
@@ -16,9 +14,8 @@ export default function Analytics() {
 
   const heatmapData = useMemo(() => {
     const today = new Date();
-    today.setHours(0, 0, 0, 0); // 🗝️ oră fixă
+    today.setHours(0, 0, 0, 0);
 
-    // Start corect: today - 29 zile
     const start = new Date(today.getTime() - 29 * 24 * 60 * 60 * 1000);
 
     const arr = [];
@@ -99,32 +96,26 @@ export default function Analytics() {
     return m;
   }, [totalDailyProgress]);
 
-  // 4️⃣ Build calendarCells: blanks before/after + 30 days
   const calendarCells = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // 🔑 Start corect: folosește aritmetică pe milisecunde, nu .setDate()
     const start = new Date(today.getTime() - 29 * 24 * 60 * 60 * 1000);
     start.setHours(0, 0, 0, 0);
 
-    // Calculează blanks înainte
     const blanksBefore = (start.getDay() + 6) % 7;
     const total = blanksBefore + 30;
     const blanksAfter = (7 - (total % 7)) % 7;
 
     const arr = [];
 
-    // Blanks înainte
     for (let i = 0; i < blanksBefore; i++) arr.push(null);
 
-    // ✅ Zile reale: de la start la today inclusiv
     for (let i = 0; i < 30; i++) {
       const d = new Date(start.getTime() + i * 24 * 60 * 60 * 1000);
       arr.push(d);
     }
 
-    // Blanks după
     for (let i = 0; i < blanksAfter; i++) arr.push(null);
 
     console.log("[DEBUG] start:", fmt(start));
@@ -137,20 +128,21 @@ export default function Analytics() {
     return arr;
   }, []);
 
-  // chart toggle & dims
   const data = chartData.daily;
   const BAR_WIDTH = 30;
   const CHART_HEIGHT = 200;
-  const maxHours = Math.max(...data.map((d) => d.hours), 1);
+
+  const rawMax = Math.max(...data.map((d) => d.hours));
+  const maxHours = rawMax > 0 ? rawMax * 1.1 : 1;
 
   return (
     <div className="container mx-auto py-8 space-y-3 text-white">
-      {/* — Line chart of hours worked — */}
       <h3 className="text-lg font-semibold">Last 30 Calendar Chart Line</h3>
-      <div className="w-full overflow-x-auto bg-gray-800 p-4 rounded-lg flex justify-center">
+      <div className="w-full overflow-x-auto bg-gray-800 p-4 rounded-lg flex justify-start md:justify-center">
         <svg
           width={data.length * BAR_WIDTH}
           height={CHART_HEIGHT + 30}
+          className="block flex-shrink-0"
           style={{ display: "block" }}
         >
           {[0, 1, 2, 3, 4].map((i) => {
@@ -175,22 +167,24 @@ export default function Analytics() {
                 strokeWidth="2"
                 points={data
                   .map((d, i) => {
-                    const y =
-                      CHART_HEIGHT - (d.hours / maxHours) * CHART_HEIGHT;
+                    const frac = Math.min(d.hours / maxHours, 1);
+                    const y = CHART_HEIGHT - frac * CHART_HEIGHT;
                     const x = i * BAR_WIDTH + BAR_WIDTH / 2;
-                    return `${x},${y}`;
+                    const yClamped = Math.max(0, Math.min(y, CHART_HEIGHT));
+                    return `${x},${yClamped}`;
                   })
                   .join(" ")}
               />
               {data.map((d, i) => {
                 if (d.hours <= 0) return null;
-                const y = CHART_HEIGHT - (d.hours / maxHours) * CHART_HEIGHT;
+                const frac = Math.min(d.hours / maxHours, 1);
+                const y = CHART_HEIGHT - frac * CHART_HEIGHT;
                 const x = i * BAR_WIDTH + BAR_WIDTH / 2;
                 return (
                   <text
                     key={i}
                     x={x}
-                    y={y - 6}
+                    y={Math.max(0, Math.min(y - 6, CHART_HEIGHT))}
                     textAnchor="middle"
                     fontSize="10"
                     fill="#8B5CF6"
@@ -218,11 +212,9 @@ export default function Analytics() {
         </svg>
       </div>
 
-      {/* — Calendar Heatmap — */}
       <div className="space-y-2">
         <h3 className="text-lg font-semibold">Last 30 Days Heatmap</h3>
         <div className="bg-gray-800 p-4 rounded-2xl grid grid-cols-7 gap-1">
-          {/* Weekday headers */}
           {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((wd) => (
             <div
               key={wd}
@@ -231,8 +223,6 @@ export default function Analytics() {
               {wd}
             </div>
           ))}
-
-          {/* Calendar days */}
           {calendarCells.map((d, i) => {
             if (!d) return <div key={i} />;
 

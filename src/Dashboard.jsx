@@ -1,6 +1,5 @@
 import React, { useReducer, useState, useRef, useEffect } from "react";
 
-// Hook for syncing with localStorage
 function useLocalStorage(key, initialValue) {
   const [value, setValue] = useState(() => {
     const stored = localStorage.getItem(key);
@@ -14,7 +13,6 @@ function useLocalStorage(key, initialValue) {
   return [value, setValue];
 }
 
-// Reducer for managing tasks
 function taskReducer(state, action) {
   switch (action.type) {
     case "ADD":
@@ -28,7 +26,6 @@ function taskReducer(state, action) {
   }
 }
 
-// Helper for background color based on deadline proximity
 function getDeadlineColor(deadline) {
   if (!deadline) return "#4B5563";
   const now = new Date();
@@ -41,7 +38,6 @@ function getDeadlineColor(deadline) {
 }
 
 export default function Dashboard({ setPage, setSelectedTask }) {
-  // tasks state
   const [storedTasks, setStoredTasks] = useLocalStorage("tasks", []);
   const [allTaskProgress, setAllTaskProgress] = useLocalStorage(
     "allTaskProgress",
@@ -54,7 +50,6 @@ export default function Dashboard({ setPage, setSelectedTask }) {
   const [tasks, dispatch] = useReducer(taskReducer, storedTasks);
   useEffect(() => setStoredTasks(tasks), [tasks]);
 
-  // form fields
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [labelName, setLabelName] = useState("");
@@ -68,14 +63,10 @@ export default function Dashboard({ setPage, setSelectedTask }) {
 
   const today = new Date().toISOString().split("T")[0];
 
-  // view toggle
   const [viewMode, setViewMode] = useState("label");
-  // modal for viewing a task
   const [modalTask, setModalTask] = useState(null);
-  // modal for creating a task
   const [isCreateOpen, setIsCreateOpen] = useState(false);
 
-  // drag & drop
   const dragItem = useRef();
   const dragOverItem = useRef();
 
@@ -116,15 +107,13 @@ export default function Dashboard({ setPage, setSelectedTask }) {
     setDailyMinutes("");
     setEstimatedFinish("");
     setDeadline("");
-    setEditingTaskId(null); // foarte important!
+    setEditingTaskId(null);
   };
 
-  // add new task
   const addTask = () => {
     if (!isValid()) return;
 
     if (editingTaskId) {
-      // UPDATE
       const updatedTasks = tasks.map((task) =>
         task.id === editingTaskId
           ? {
@@ -142,7 +131,6 @@ export default function Dashboard({ setPage, setSelectedTask }) {
       );
       dispatch({ type: "REORDER", payload: updatedTasks });
 
-      // 🔑 Update selectedTask și LS dacă task-ul editat e cel selectat
       if (selectedTask && selectedTask.id === editingTaskId) {
         const updated = updatedTasks.find((t) => t.id === editingTaskId);
         setSelectedTaskState(updated);
@@ -152,7 +140,6 @@ export default function Dashboard({ setPage, setSelectedTask }) {
 
       setEditingTaskId(null);
     } else {
-      // ADD nou
       const newTask = {
         id: Date.now(),
         title,
@@ -173,7 +160,6 @@ export default function Dashboard({ setPage, setSelectedTask }) {
   const removeTask = (id) => {
     dispatch({ type: "REMOVE", payload: id });
 
-    // 🔑 Șterge progresul din allTaskProgress
     const updatedProgress = { ...allTaskProgress };
     Object.keys(updatedProgress).forEach((key) => {
       if (key.startsWith(`${id}_`)) {
@@ -182,7 +168,6 @@ export default function Dashboard({ setPage, setSelectedTask }) {
     });
     setAllTaskProgress(updatedProgress);
 
-    // 🔑 Dacă ștergi task-ul selectat => reset
     if (selectedTask && selectedTask.id === id) {
       setSelectedTaskState(null);
       setSelectedTask(null);
@@ -193,7 +178,6 @@ export default function Dashboard({ setPage, setSelectedTask }) {
   return (
     <div className="container bg-gray-900">
       <div className="container mx-auto py-8 space-y-8">
-        {/* Toolbar */}
         <div className="flex flex-wrap justify-between items-center gap-4">
           <div className="flex flex-wrap gap-2">
             <button
@@ -225,7 +209,6 @@ export default function Dashboard({ setPage, setSelectedTask }) {
           </button>
         </div>
 
-        {/* Tasks Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {tasks.length > 0 ? (
             tasks.map((t, idx) => {
@@ -240,69 +223,84 @@ export default function Dashboard({ setPage, setSelectedTask }) {
                   onDragStart={(e) => onDragStart(e, idx)}
                   onDragEnter={(e) => onDragEnter(e, idx)}
                   onDragEnd={onDragEnd}
-                  style={{ backgroundColor: bg }}
-                  className="p-6 rounded-2xl text-white cursor-move shadow-lg flex flex-col transition hover:shadow-2xl"
+                  className="
+                 bg-gradient-to-br from-gray-800 to-gray-900
+                 rounded-2xl
+                 shadow-2xl
+                 overflow-hidden
+                 text-white
+                 cursor-move
+                 transition hover:shadow-2xl
+                  "
                 >
-                  <div className="flex justify-between items-center mb-4">
-                    <span className="font-bold text-xl">#{idx + 1}</span>
-                    {t.labelName && (
-                      <span
-                        className="px-3 py-1 text-xs font-semibold uppercase tracking-wide rounded-full"
-                        style={{ backgroundColor: t.labelColor }}
+                  <div
+                    className="h-1 w-full rounded-t-2xl mb-4"
+                    style={{ backgroundColor: bg }}
+                  />
+                  <div className="p-4">
+                    <div className="flex justify-between items-center mb-4">
+                      <span className="font-bold text-xl">#{idx + 1}</span>
+                      {t.labelName && (
+                        <span
+                          className="px-3 py-1 text-xs font-semibold uppercase tracking-wide rounded-full"
+                          style={{ backgroundColor: t.labelColor }}
+                        >
+                          {t.labelName}
+                        </span>
+                      )}
+                    </div>
+                    <h3 className="text-3xl font-extrabold mb-2 leading-tight">
+                      {t.title}
+                    </h3>
+                    <p className="text-base mb-6 flex-1 whitespace-normal break-words line-clamp-1">
+                      {t.description}
+                    </p>
+                    <div className="border-t border-white/20 pt-4 text-sm space-y-2 mb-6 opacity-80">
+                      {(t.dailyHours || t.dailyMinutes) && (
+                        <div>
+                          <strong>Time/Day: </strong>
+                          {t.dailyHours ? `${t.dailyHours}h` : ""}
+                          {t.dailyMinutes ? ` ${t.dailyMinutes}m` : ""}
+                        </div>
+                      )}
+                      {t.estimatedFinish && (
+                        <div>
+                          <strong>Est. Finish:</strong>{" "}
+                          {new Date(t.estimatedFinish).toLocaleDateString()}
+                        </div>
+                      )}
+                      {t.deadline && (
+                        <div>
+                          <strong>Deadline:</strong>{" "}
+                          {new Date(t.deadline).toLocaleDateString()}
+                        </div>
+                      )}
+                    </div>
+                    <div className="mt-auto flex justify-end gap-3">
+                      <button
+                        onClick={() => setModalTask(t)}
+                        className="px-4 py-2 bg-white text-gray-800 rounded-lg text-sm transition hover:bg-gray-100"
                       >
-                        {t.labelName}
-                      </span>
-                    )}
-                  </div>
-                  <h3 className="text-3xl font-extrabold mb-2 leading-tight">
-                    {t.title}
-                  </h3>
-                  <p className="text-base mb-6 flex-1">{t.description}</p>
-                  <div className="border-t border-white/20 pt-4 text-sm space-y-2 mb-6 opacity-80">
-                    {(t.dailyHours || t.dailyMinutes) && (
-                      <div>
-                        <strong>Time/Day: </strong>
-                        {t.dailyHours ? `${t.dailyHours}h` : ""}
-                        {t.dailyMinutes ? ` ${t.dailyMinutes}m` : ""}
-                      </div>
-                    )}
-                    {t.estimatedFinish && (
-                      <div>
-                        <strong>Est. Finish:</strong>{" "}
-                        {new Date(t.estimatedFinish).toLocaleDateString()}
-                      </div>
-                    )}
-                    {t.deadline && (
-                      <div>
-                        <strong>Deadline:</strong>{" "}
-                        {new Date(t.deadline).toLocaleDateString()}
-                      </div>
-                    )}
-                  </div>
-                  <div className="mt-auto flex justify-end gap-3">
-                    <button
-                      onClick={() => setModalTask(t)}
-                      className="px-4 py-2 bg-white text-gray-800 rounded-lg text-sm transition hover:bg-gray-100"
-                    >
-                      View
-                    </button>
-                    <button
-                      onClick={() => {
-                        setSelectedTaskState(t);
-                        setSelectedTask(t);
-                        setSelectedTaskLS(t);
-                        setPage("pomodoro");
-                      }}
-                      className="px-4 py-2 bg-green-400 hover:bg-green-500 rounded-lg text-sm transition"
-                    >
-                      Start
-                    </button>
-                    <button
-                      onClick={() => removeTask(t.id)}
-                      className="px-4 py-2 bg-red-500 hover:bg-red-600 rounded-lg text-sm transition"
-                    >
-                      End
-                    </button>
+                        View
+                      </button>
+                      <button
+                        onClick={() => {
+                          setSelectedTaskState(t);
+                          setSelectedTask(t);
+                          setSelectedTaskLS(t);
+                          setPage("pomodoro");
+                        }}
+                        className="px-4 py-2 bg-green-400 hover:bg-green-500 rounded-lg text-sm transition"
+                      >
+                        Start
+                      </button>
+                      <button
+                        onClick={() => removeTask(t.id)}
+                        className="px-4 py-2 bg-red-500 hover:bg-red-600 rounded-lg text-sm transition"
+                      >
+                        End
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
@@ -315,16 +313,13 @@ export default function Dashboard({ setPage, setSelectedTask }) {
         </div>
       </div>
 
-      {/* ==== CREATE TASK MODAL ==== */}
       {isCreateOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30 backdrop-blur-sm">
           <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl w-11/12 max-w-lg overflow-hidden">
-            {/* — accent bar removed — */}
-
-            {/* Form contents: single column */}
             <div className="p-6 grid grid-cols-1 gap-4">
               <input
                 type="text"
+                maxLength={10}
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="Title"
@@ -332,6 +327,7 @@ export default function Dashboard({ setPage, setSelectedTask }) {
               />
               <input
                 type="text"
+                maxLength={100}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Description"
@@ -339,6 +335,7 @@ export default function Dashboard({ setPage, setSelectedTask }) {
               />
               <input
                 type="text"
+                maxLength={10}
                 value={labelName}
                 onChange={(e) => setLabelName(e.target.value)}
                 placeholder="Label Name"
@@ -352,20 +349,34 @@ export default function Dashboard({ setPage, setSelectedTask }) {
               />
               <input
                 type="number"
+                min={0}
+                max={24}
                 value={dailyHours}
                 onChange={(e) => setDailyHours(e.target.value)}
+                onBlur={(e) => {
+                  if (e.target.value !== "") {
+                    const clamped = Math.min(Math.max(+e.target.value, 0), 24);
+                    setDailyHours(clamped);
+                  }
+                }}
                 placeholder="Hours/Day (optional)"
                 className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500 w-full"
-                min="0"
               />
+
               <input
                 type="number"
+                min={0}
+                max={59}
                 value={dailyMinutes}
                 onChange={(e) => setDailyMinutes(e.target.value)}
+                onBlur={(e) => {
+                  if (e.target.value !== "") {
+                    const clamped = Math.min(Math.max(+e.target.value, 0), 59);
+                    setDailyMinutes(clamped);
+                  }
+                }}
                 placeholder="Minutes/Day (optional)"
                 className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500 w-full"
-                min="0"
-                max="59"
               />
               <input
                 type={estimatedFinish ? "date" : "text"}
@@ -393,7 +404,6 @@ export default function Dashboard({ setPage, setSelectedTask }) {
               />
             </div>
 
-            {/* Action bar */}
             <div className="border-t border-gray-200 dark:border-gray-700 px-6 py-4 flex justify-between">
               <button
                 onClick={() => {
@@ -422,7 +432,6 @@ export default function Dashboard({ setPage, setSelectedTask }) {
           </div>
         </div>
       )}
-      {/* ==== VIEW TASK MODAL ==== */}
       {modalTask && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30 backdrop-blur-sm">
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg w-11/12 max-w-md overflow-hidden">
@@ -430,7 +439,7 @@ export default function Dashboard({ setPage, setSelectedTask }) {
               <h2 className="text-xl font-bold">{modalTask.title}</h2>
             </div>
             <div className="p-4 space-y-2 text-gray-800 dark:text-gray-100">
-              <p>
+              <p className="text-base whitespace-normal break-words">
                 <strong>Description:</strong> {modalTask.description}
               </p>
               {modalTask.labelName && (
@@ -487,7 +496,6 @@ export default function Dashboard({ setPage, setSelectedTask }) {
               </button>
               <button
                 onClick={() => {
-                  // Populează formularul cu datele task-ului
                   setTitle(modalTask.title);
                   setDescription(modalTask.description);
                   setLabelName(modalTask.labelName);
@@ -496,9 +504,9 @@ export default function Dashboard({ setPage, setSelectedTask }) {
                   setDailyMinutes(modalTask.dailyMinutes || "");
                   setEstimatedFinish(modalTask.estimatedFinish || "");
                   setDeadline(modalTask.deadline || "");
-                  setEditingTaskId(modalTask.id); // ADĂUGĂ ASTA!
-                  setModalTask(null); // închide modalul de View
-                  setIsCreateOpen(true); // deschide modalul de Create/Edit
+                  setEditingTaskId(modalTask.id);
+                  setModalTask(null);
+                  setIsCreateOpen(true);
                 }}
                 className="px-3 py-1 bg-yellow-400 text-gray-900 rounded-lg hover:bg-yellow-500 transition"
               >

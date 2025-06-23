@@ -1,11 +1,9 @@
-// src/App.jsx
 import React, { useState, useEffect } from "react";
 import Dashboard from "./Dashboard";
 import Pomodoro from "./Pomodoro";
 import Analytics from "./Analytics";
 import CalendarPage from "./Calendar";
 
-// Hook comun de LocalStorage
 function useLocalStorage(key, initialValue) {
   const [value, setValue] = useState(() => {
     const stored = localStorage.getItem(key);
@@ -41,7 +39,6 @@ function Navbar({ page, setPage }) {
           </h1>
         </div>
 
-        {/* ✅ NAVBAR DESKTOP */}
         <nav className="mt-4 hidden md:flex justify-center flex-wrap gap-4 w-full">
           {navItems.map(({ key, label, emoji }) => (
             <button
@@ -60,9 +57,7 @@ function Navbar({ page, setPage }) {
           ))}
         </nav>
 
-        {/* ✅ NAVBAR MOBIL */}
         <nav className="mt-4 flex md:hidden justify-center flex-wrap gap-4 w-full">
-          {/* pagina curentă */}
           <button
             key={currentPage.key}
             className="flex items-center space-x-2 py-2 px-4 rounded-full bg-blue-500 text-white shadow-lg"
@@ -71,7 +66,6 @@ function Navbar({ page, setPage }) {
             <span className="font-medium">{currentPage.label}</span>
           </button>
 
-          {/* ☰ buton */}
           <button
             onClick={() => setMenuOpen((prev) => !prev)}
             className="flex items-center justify-center w-10 h-10 rounded-full bg-gray-700 hover:bg-gray-600 transition"
@@ -81,7 +75,6 @@ function Navbar({ page, setPage }) {
           </button>
         </nav>
 
-        {/* ✅ MENIU MOBIL extins */}
         {menuOpen && (
           <div className="mt-2 flex flex-col items-start ml-20 gap-2 md:hidden">
             {otherPages.map(({ key, label, emoji }) => (
@@ -105,9 +98,7 @@ function Navbar({ page, setPage }) {
 }
 
 export default function App() {
-  // persist pagina curentă
   const [page, setPage] = useLocalStorage("currentPage", "dashboard");
-  // persist task-ul selectat
   const [selectedTask, setSelectedTask] = useLocalStorage("selectedTask", null);
 
   return (

@@ -5,16 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Pomodoro Task Manager</title>
 
-    <!-- Cross-Origin Opener Policy pentru rezolvarea erorii la login Google -->
     <meta http-equiv="Cross-Origin-Embedder-Policy" content="unsafe-none" />
 
-    <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
 
-    <!-- Google Identity Services -->
     <script src="https://accounts.google.com/gsi/client" async defer></script>
 
-    <!-- CSP actualizat pentru a permite resursele necesare Google -->
     <meta
       http-equiv="Content-Security-Policy"
       content="
@@ -32,7 +28,6 @@
   <body class="bg-white text-gray-900">
     <div id="root"></div>
 
-    <!-- React entry point -->
     <script type="module" src="/src/index.jsx"></script>
   </body>
 </html>

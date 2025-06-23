@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
 
-// Hook pentru a citi și actualiza task-urile în localStorage
 function useLocalTasks() {
   const [tasks, setTasks] = useState(() => {
     try {
@@ -12,7 +11,6 @@ function useLocalTasks() {
     }
   });
 
-  // Sincronizare dacă se schimbă în alt tab
   useEffect(() => {
     const onStorage = (e) => {
       if (e.key === "tasks") {
@@ -40,7 +38,6 @@ function useLocalTasks() {
   return [tasks, updateTask];
 }
 
-// Generează matricea de săptămâni pentru o lună anume
 function generateMonth(year, month) {
   const firstDay = new Date(year, month, 1);
   const lastDay = new Date(year, month + 1, 0);
@@ -59,7 +56,6 @@ function generateMonth(year, month) {
   return weeks;
 }
 
-// Normalizează un "YYYY-MM-DD" la același string ISO local, pentru all-day events
 function normalizeDate(dateStr) {
   const [y, m, d] = dateStr.split("-").map(Number);
   const dt = new Date(y, m - 1, d);
@@ -74,7 +70,6 @@ export default function Calendar({ setPage }) {
   const [isSelectModalOpen, setSelectModalOpen] = useState(false);
   const [selectedTasks, setSelectedTasks] = useState([]);
 
-  // Google API config
   const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
   const API_KEY = import.meta.env.VITE_GOOGLE_API_KEY;
   const DISCOVERY_DOCS = [
@@ -82,7 +77,6 @@ export default function Calendar({ setPage }) {
   ];
   const SCOPES = "https://www.googleapis.com/auth/calendar";
 
-  // Încarcă GAPI și GIS la mount
   useEffect(() => {
     const s1 = document.createElement("script");
     s1.src = "https://apis.google.com/js/api.js";
@@ -106,7 +100,6 @@ export default function Calendar({ setPage }) {
     };
   }, []);
 
-  // Initialize GIS token client
   const initGoogleAuth = () => {
     window.tokenClient = window.google.accounts.oauth2.initTokenClient({
       client_id: CLIENT_ID,
@@ -122,7 +115,6 @@ export default function Calendar({ setPage }) {
     });
   };
 
-  // Fetch evenimente din Google Calendar
   const fetchGoogleEvents = () => {
     window.gapi.client.calendar.events
       .list({
@@ -145,7 +137,6 @@ export default function Calendar({ setPage }) {
     setEvents([]);
   };
 
-  // Adaugă task-uri ca evenimente all-day
   const addTasksToGoogleCalendar = (tasksToAdd) => {
     const inserts = tasksToAdd
       .filter((t) => !t.googleEventId)
@@ -170,7 +161,6 @@ export default function Calendar({ setPage }) {
     Promise.all(inserts).then(fetchGoogleEvents);
   };
 
-  // Șterge eveniment și curăță googleEventId din task
   const handleDeleteEvent = (eventId) => {
     window.gapi.client.calendar.events
       .delete({ calendarId: "primary", eventId })
@@ -185,7 +175,6 @@ export default function Calendar({ setPage }) {
       .catch((err) => console.error("Error deleting event:", err));
   };
 
-  // Pregătim datele pentru afișaj
   const month = currentDate.getMonth();
   const year = currentDate.getFullYear();
   const weeks = generateMonth(year, month);
@@ -201,10 +190,8 @@ export default function Calendar({ setPage }) {
 
   return (
     <div className="min-h-screen bg-gray-900 text-white p-4 sm:p-6 flex flex-col">
-      {/* HEADER */}
       <header className="mb-4">
         <div className="flex justify-between items-center">
-          {/* Stânga: Add All + Select */}
           <div className="flex space-x-2">
             <button
               onClick={() => addTasksToGoogleCalendar(tasks)}
@@ -221,7 +208,6 @@ export default function Calendar({ setPage }) {
               Select
             </button>
           </div>
-          {/* Dreapta: Sign In / Sign Out */}
           <div>
             {isSignedIn ? (
               <button
@@ -242,14 +228,12 @@ export default function Calendar({ setPage }) {
         </div>
       </header>
 
-      {/* Month Navigation */}
       <div className="flex justify-center items-center mb-4 space-x-4">
         <button
           onClick={goPrev}
           className="p-2 bg-gray-700 rounded-full hover:bg-gray-600"
           aria-label="Previous month"
         >
-          {/* Chevron Left SVG */}
           <svg
             xmlns="http://www.w3.org/2000/svg"
             className="h-5 w-5"
@@ -265,8 +249,6 @@ export default function Calendar({ setPage }) {
             />
           </svg>
         </button>
-
-        {/* Aici afișăm luna + anul */}
         <span className="font-medium text-lg">
           {currentDate.toLocaleString("default", {
             month: "long",
@@ -279,7 +261,6 @@ export default function Calendar({ setPage }) {
           className="p-2 bg-gray-700 rounded-full hover:bg-gray-600"
           aria-label="Next month"
         >
-          {/* Chevron Right SVG */}
           <svg
             xmlns="http://www.w3.org/2000/svg"
             className="h-5 w-5"
@@ -296,8 +277,6 @@ export default function Calendar({ setPage }) {
           </svg>
         </button>
       </div>
-
-      {/* GRID DESKTOP */}
       <div className="hidden sm:grid grid-cols-7 gap-2 mb-2">
         {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
           <div key={d} className="text-center font-medium">
@@ -340,8 +319,6 @@ export default function Calendar({ setPage }) {
           );
         })}
       </div>
-
-      {/* LISTĂ MOBIL */}
       <div className="sm:hidden flex-1 overflow-y-auto space-y-2">
         {weeks.flat().map((day) => {
           const key = day.toISOString().split("T")[0];
@@ -387,72 +364,84 @@ export default function Calendar({ setPage }) {
           );
         })}
       </div>
-
-      {/* SELECT TASKS MODAL */}
       {isSelectModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-          <div className="bg-gray-800 rounded-lg w-full max-w-5xl">
-            <div className="p-6">
-              <h3 className="text-xl font-bold mb-4">Select Tasks</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 max-h-96 overflow-y-auto">
-                {tasks.map((task) => {
-                  const checked = selectedTasks.some((t) => t.id === task.id);
-                  return (
-                    <div
-                      key={task.id}
-                      className="p-4 rounded-lg flex flex-col"
-                      style={{ backgroundColor: task.labelColor }}
-                    >
-                      <label className="flex items-start">
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={(e) => {
-                            if (e.target.checked)
-                              setSelectedTasks((prev) => [...prev, task]);
-                            else
-                              setSelectedTasks((prev) =>
-                                prev.filter((t) => t.id !== task.id)
-                              );
-                          }}
-                          className="mr-3 mt-1"
-                        />
-                        <div className="flex-1">
-                          <h4 className="text-lg font-bold mb-1">
-                            {task.title}
-                          </h4>
-                          {task.description && (
-                            <p className="text-sm mb-2">{task.description}</p>
+        <div
+          className="
+      fixed inset-0
+      bg-black bg-opacity-50
+      flex items-center justify-center
+      z-50
+    "
+        >
+          <div
+            className="
+        bg-gray-800
+        w-[90%] max-w-md
+        rounded-lg
+        p-4 sm:p-6
+        flex flex-col
+        max-h-[90vh]
+        overflow-hidden
+      "
+          >
+            <h3 className="text-xl font-bold mb-4">Select Tasks</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 overflow-y-auto flex-1">
+              {tasks.map((task) => {
+                const checked = selectedTasks.some((t) => t.id === task.id);
+                return (
+                  <div
+                    key={task.id}
+                    className="p-4 rounded-lg flex flex-col"
+                    style={{ backgroundColor: task.labelColor }}
+                  >
+                    <label className="flex items-start">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) => {
+                          if (e.target.checked)
+                            setSelectedTasks((prev) => [...prev, task]);
+                          else
+                            setSelectedTasks((prev) =>
+                              prev.filter((t) => t.id !== task.id)
+                            );
+                        }}
+                        className="mr-3 mt-1"
+                      />
+                      <div className="flex-1">
+                        <h4 className="text-lg font-bold mb-1">{task.title}</h4>
+                        {task.description && (
+                          <p className="text-sm mb-2">{task.description}</p>
+                        )}
+                        <div className="text-xs opacity-80 space-y-1">
+                          {task.dailyHours && (
+                            <div>
+                              <strong>Hours/Day:</strong> {task.dailyHours}
+                            </div>
                           )}
-                          <div className="text-xs opacity-80 space-y-1">
-                            {task.dailyHours && (
-                              <div>
-                                <strong>Hours/Day:</strong> {task.dailyHours}
-                              </div>
-                            )}
-                            {task.estimatedFinish && (
-                              <div>
-                                <strong>Est. Finish:</strong>{" "}
-                                {new Date(
-                                  task.estimatedFinish
-                                ).toLocaleDateString()}
-                              </div>
-                            )}
-                            {task.deadline && (
-                              <div>
-                                <strong>Deadline:</strong>{" "}
-                                {new Date(task.deadline).toLocaleDateString()}
-                              </div>
-                            )}
-                          </div>
+                          {task.estimatedFinish && (
+                            <div>
+                              <strong>Est. Finish:</strong>{" "}
+                              {new Date(
+                                task.estimatedFinish
+                              ).toLocaleDateString()}
+                            </div>
+                          )}
+                          {task.deadline && (
+                            <div>
+                              <strong>Deadline:</strong>{" "}
+                              {new Date(task.deadline).toLocaleDateString()}
+                            </div>
+                          )}
                         </div>
-                      </label>
-                    </div>
-                  );
-                })}
-              </div>
+                      </div>
+                    </label>
+                  </div>
+                );
+              })}
             </div>
-            <div className="flex justify-end space-x-2 p-4 border-t border-gray-700">
+
+            <div className="flex justify-end space-x-2 pt-4 border-t border-gray-700">
               <button
                 onClick={() => {
                   setSelectModalOpen(false);

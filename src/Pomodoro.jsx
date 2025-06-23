@@ -1,6 +1,5 @@
 import React, { useReducer, useState, useEffect, useRef } from "react";
 
-// Hook for syncing with localStorage
 function useLocalStorage(key, initialValue) {
   const [value, setValue] = useState(() => {
     const stored = localStorage.getItem(key);
@@ -12,7 +11,6 @@ function useLocalStorage(key, initialValue) {
   return [value, setValue];
 }
 
-// Reducer for Pomodoro settings and session history
 function pomoReducer(state, action) {
   switch (action.type) {
     case "SETTINGS":
@@ -29,7 +27,6 @@ function pomoReducer(state, action) {
   }
 }
 
-// Hook encapsulating Pomodoro timer logic
 function usePomodoro({ work, shortBreak, longBreak }, onExpire) {
   const [mode, setMode] = useState("work");
   const [timeLeft, setTimeLeft] = useState(work * 60);
@@ -50,7 +47,6 @@ function usePomodoro({ work, shortBreak, longBreak }, onExpire) {
     expiredRef.current = false;
     setIsRunning(true);
 
-    // Calculează deadline-ul corect
     const sec =
       mode === "work" ? work : mode === "shortBreak" ? shortBreak : longBreak;
     deadlineRef.current = Date.now() + sec * 1000;
@@ -72,7 +68,7 @@ function usePomodoro({ work, shortBreak, longBreak }, onExpire) {
           onExpire();
         }
       }
-    }, 500); // rulează la 500ms pentru mai fluent
+    }, 500);
   };
 
   const pause = () => {
@@ -94,9 +90,8 @@ function usePomodoro({ work, shortBreak, longBreak }, onExpire) {
 
 export default function Pomodoro({ selectedTask, setPage }) {
   const [progressLoaded, setProgressLoaded] = useState(false);
-  // --- Pomodoro state + persistence ---
   const [stored, setStored] = useLocalStorage("pomodoro", {
-    work: 25 * 60, // 25 min in secunde
+    work: 25 * 60,
     shortBreak: 5 * 60,
     longBreak: 15 * 60,
     sessions: [],
@@ -104,27 +99,22 @@ export default function Pomodoro({ selectedTask, setPage }) {
   const [state, dispatch] = useReducer(pomoReducer, stored);
   useEffect(() => setStored(state), [state]);
 
-  // --- Notifications + session history handler ---
   const notify = (msg) => window.Notification && new Notification(msg);
   const onExpire = () => {
-    // salvează sesiunea curentă
     dispatch({
       type: "ADD_SESSION",
       payload: { mode, timestamp: Date.now() },
     });
     notify(mode === "work" ? "Pomodoro ended" : "Break ended");
 
-    // trece la următorul mod O SINGURĂ DATĂ
     setMode((prev) => (prev === "work" ? "shortBreak" : "work"));
   };
 
-  // --- Timer hook ---
   const { mode, timeLeft, start, pause, reset, setMode, isRunning } =
     usePomodoro(state, onExpire);
   const minutes = String(Math.floor(timeLeft / 60)).padStart(2, "0");
   const seconds = String(timeLeft % 60).padStart(2, "0");
 
-  // --- Settings form state ---
   const [form, setForm] = useState({
     workMinutes: Math.floor(state.work / 60),
     workSeconds: state.work % 60,
@@ -155,7 +145,6 @@ export default function Pomodoro({ selectedTask, setPage }) {
     });
   };
 
-  // === Task progress persistence ===
   const today = new Date().toISOString().slice(0, 10);
   const [taskProgress, setTaskProgress] = useState({
     date: today,
@@ -228,7 +217,6 @@ export default function Pomodoro({ selectedTask, setPage }) {
 
         setTotalProgress(newTotal);
 
-        // 👉 Salvează și în localStorage sub o cheie dedicată
         const rawTotal = localStorage.getItem("totalDailyProgress");
         const totalAll = rawTotal ? JSON.parse(rawTotal) : {};
 
@@ -238,7 +226,6 @@ export default function Pomodoro({ selectedTask, setPage }) {
     } catch {}
   }, [taskProgress, progressLoaded, today]);
 
-  // persist progress whenever it changes
   useEffect(() => {
     if (!selectedTask || !progressLoaded) return;
 
@@ -256,11 +243,9 @@ export default function Pomodoro({ selectedTask, setPage }) {
     localStorage.setItem("allTaskProgress", JSON.stringify(all));
   }, [taskProgress, selectedTask, today, progressLoaded]);
 
-  // count each second in work mode
   useEffect(() => {
     if (!selectedTask || !isRunning || mode !== "work") return;
 
-    // ✅ Increment imediat prima secundă
     setTaskProgress((tp) => {
       const newWorkedSec = tp.workedSec + 1;
       return {
@@ -271,7 +256,6 @@ export default function Pomodoro({ selectedTask, setPage }) {
       };
     });
 
-    // ✅ Apoi continuă cu intervalul normal
     const interval = setInterval(() => {
       setTaskProgress((tp) => {
         const newWorkedSec = tp.workedSec + 1;
@@ -287,7 +271,6 @@ export default function Pomodoro({ selectedTask, setPage }) {
     return () => clearInterval(interval);
   }, [isRunning, mode, selectedTask]);
 
-  // ⏳ Total daily time (in seconds)
   const dailyH = selectedTask?.dailyHours || 0;
   const dailyM = selectedTask?.dailyMinutes || 0;
   const dailyTotalSec = dailyH * 3600 + dailyM * 60;
@@ -297,13 +280,11 @@ export default function Pomodoro({ selectedTask, setPage }) {
       ? Math.min((taskProgress.workedSec / dailyTotalSec) * 100, 100)
       : 0;
 
-  // ⏳ Worked time (folosește direct din taskProgress)
   const workedH = taskProgress.workedH;
   const workedM = taskProgress.workedM;
 
   const dailyTargetH = Math.floor(dailyTotalSec / 3600);
   const dailyTargetM = Math.floor((dailyTotalSec % 3600) / 60);
-  // === end task-progress code ===
 
   const formatMode = (mode) => {
     if (mode === "work") return "Work";
@@ -315,7 +296,6 @@ export default function Pomodoro({ selectedTask, setPage }) {
   return (
     <div className="container mx-auto py-8">
       <div className="grid grid-cols-1 md:grid-cols-2  gap-8">
-        {/* ==== Pomodoro Timer Card ==== */}
         <div className="md:col-start-1 md:row-span-2 bg-gradient-to-br from-gray-800 to-gray-900 rounded-3xl shadow-2xl overflow-hidden">
           <div className="h-1 bg-indigo-500" />
           <div className="px-6 py-4 border-b border-gray-700">
@@ -324,7 +304,6 @@ export default function Pomodoro({ selectedTask, setPage }) {
             </h2>
           </div>
           <div className="p-8 space-y-6">
-            {/* Timer display */}
             <div className="text-center space-y-2">
               <div className="text-7xl font-mono text-white">
                 {minutes}:{seconds}
@@ -334,7 +313,6 @@ export default function Pomodoro({ selectedTask, setPage }) {
               </div>
             </div>
 
-            {/* Mode tabs */}
             <div className="flex justify-center space-x-4">
               {["work", "shortBreak", "longBreak"].map((m) => (
                 <button
@@ -358,7 +336,6 @@ export default function Pomodoro({ selectedTask, setPage }) {
               ))}
             </div>
 
-            {/* Controls */}
             <div className="flex justify-center space-x-4">
               <button
                 onClick={start}
@@ -382,7 +359,6 @@ export default function Pomodoro({ selectedTask, setPage }) {
               </button>
             </div>
 
-            {/* Session History */}
             <div className="space-y-2">
               <h3 className="text-lg font-semibold text-white">
                 Session History
@@ -403,53 +379,59 @@ export default function Pomodoro({ selectedTask, setPage }) {
           </div>
         </div>
 
-        {/* ==== Task Details & Progress ==== */}
         {selectedTask && (
           <div
             className="
-            md:col-start-2 md:row-start-1
-            bg-gray-800 rounded-2xl shadow-lg
-            p-4                /* reduced padding */
-            text-white space-y-4
-            max-h-64          /* max height */
-          "
+      md:col-start-2 md:row-start-1
+      bg-gradient-to-br from-gray-800 to-gray-900
+      rounded-2xl shadow-2xl overflow-hidden
+      text-white max-h-64
+    "
           >
-            <h3 className="text-2xl font-bold">{selectedTask.title}</h3>
-            <p>{selectedTask.description}</p>
-            {selectedTask.labelName && (
-              <span
-                className="inline-block px-3 py-1 text-xs font-semibold uppercase rounded-full"
-                style={{ backgroundColor: selectedTask.labelColor }}
+            <div
+              className="h-1 w-full"
+              style={{ backgroundColor: selectedTask.labelColor }}
+            />
+
+            <div className="p-4 space-y-4 flex flex-col">
+              <h3 className="text-2xl font-bold">{selectedTask.title}</h3>
+              <p className=" text-gray-300 break-words line-clamp-1">
+                {selectedTask.description}
+              </p>
+              {selectedTask.labelName && (
+                <span
+                  className="inline-block max-w-36 truncate px-2 py-1 text-xs font-semibold uppercase rounded-full"
+                  style={{ backgroundColor: selectedTask.labelColor }}
+                >
+                  {selectedTask.labelName}
+                </span>
+              )}
+              {dailyTotalSec > 0 && (
+                <div className="mt-4 space-y-1">
+                  <div className="flex justify-between text-sm">
+                    <span>Progress:</span>
+                    <span>
+                      {workedH}h {workedM}m / {dailyTargetH}h {dailyTargetM}m
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-700 rounded-full h-2">
+                    <div
+                      className="h-2 rounded-full transition-all bg-green-500"
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+              <button
+                onClick={() => setPage("dashboard")}
+                className="mt-4 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-full"
               >
-                {selectedTask.labelName}
-              </span>
-            )}
-            {dailyTotalSec > 0 && (
-              <div className="mt-4 space-y-1">
-                <div className="flex justify-between text-sm">
-                  <span>Progress:</span>
-                  <span>
-                    {workedH}h {workedM}m / {dailyTargetH}h {dailyTargetM}m
-                  </span>
-                </div>
-                <div className="w-full bg-gray-700 rounded-full h-2">
-                  <div
-                    className="bg-green-500 h-2 rounded-full transition-all"
-                    style={{ width: `${pct}%` }}
-                  />
-                </div>
-              </div>
-            )}
-            <button
-              onClick={() => setPage("dashboard")}
-              className="mt-4 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-full"
-            >
-              Back to Dashboard
-            </button>
+                Back to Dashboard
+              </button>
+            </div>
           </div>
         )}
 
-        {/* ==== Settings Card ==== */}
         <div className="md:col-start-2 md:row-start-2 bg-gradient-to-br from-gray-800 to-gray-900 rounded-3xl shadow-2xl overflow-hidden">
           <div className="h-1 bg-indigo-500" />
           <div className="px-6 py-4 border-b border-gray-700">
@@ -469,28 +451,45 @@ export default function Pomodoro({ selectedTask, setPage }) {
                   <div className="flex space-x-2">
                     <input
                       type="number"
-                      min="0"
+                      min={0}
+                      max={1000}
                       value={form[`${key}Minutes`]}
-                      onChange={(e) =>
-                        setForm((f) => ({
-                          ...f,
-                          [`${key}Minutes`]: +e.target.value,
-                        }))
-                      }
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        const num = raw === "" ? "" : parseInt(raw, 10);
+                        if (raw === "" || (!isNaN(num) && num >= 0)) {
+                          setForm((f) => ({ ...f, [`${key}Minutes`]: num }));
+                        }
+                      }}
+                      onBlur={() => {
+                        let v = form[`${key}Minutes`];
+                        if (v !== "") {
+                          v = Math.min(Math.max(v, 0), 1000);
+                          setForm((f) => ({ ...f, [`${key}Minutes`]: v }));
+                        }
+                      }}
                       className="w-24 px-3 py-2 rounded-lg bg-gray-700 text-white"
                       placeholder="Minutes"
                     />
                     <input
                       type="number"
-                      min="0"
-                      max="59"
+                      min={0}
+                      max={59}
                       value={form[`${key}Seconds`]}
-                      onChange={(e) =>
-                        setForm((f) => ({
-                          ...f,
-                          [`${key}Seconds`]: +e.target.value,
-                        }))
-                      }
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        const num = raw === "" ? "" : parseInt(raw, 10);
+                        if (raw === "" || (!isNaN(num) && num >= 0)) {
+                          setForm((f) => ({ ...f, [`${key}Seconds`]: num }));
+                        }
+                      }}
+                      onBlur={() => {
+                        let v = form[`${key}Seconds`];
+                        if (v !== "") {
+                          v = Math.min(Math.max(v, 0), 59);
+                          setForm((f) => ({ ...f, [`${key}Seconds`]: v }));
+                        }
+                      }}
                       className="w-24 px-3 py-2 rounded-lg bg-gray-700 text-white"
                       placeholder="Seconds"
                     />
