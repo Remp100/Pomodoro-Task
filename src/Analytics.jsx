@@ -2,130 +2,152 @@ import React, { useState, useEffect, useMemo } from "react";
 
 export default function Analytics() {
   // 1️⃣ Load sessions + work length from localStorage
-  const { sessions = [], work = 25 } =
-    JSON.parse(localStorage.getItem("pomodoro")) || {};
+  const totalDailyProgress =
+    JSON.parse(localStorage.getItem("totalDailyProgress")) || {};
+  console.log("[DEBUG] totalDailyProgress:", totalDailyProgress);
 
   // helper to format YYYY-MM-DD
-  const fmt = (d) => d.toISOString().slice(0, 10);
+  const fmt = (d) => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
 
-  // 2️⃣ Build heatmapCounts: day → number of work sessions
-  const heatmapCounts = useMemo(() => {
-    const m = {};
-    sessions.forEach((s) => {
-      if (s.mode === "work") {
-        const day = fmt(new Date(s.timestamp));
-        m[day] = (m[day] || 0) + 1;
-      }
-    });
-    return m;
-  }, [sessions]);
-
-  // 3️⃣ Build chartData (daily/weekly/monthly) – unchanged
   const heatmapData = useMemo(() => {
     const today = new Date();
-    const map = heatmapCounts;
-    return Array.from({ length: 30 }).map((_, i) => {
-      const d = new Date();
-      d.setDate(today.getDate() - (29 - i));
-      const day = fmt(d),
-        cnt = map[day] || 0,
-        hrs = (cnt * work) / 60;
-      return { day, label: day.slice(5), sessions: cnt, hours: hrs };
-    });
-  }, [heatmapCounts, work]);
+    today.setHours(0, 0, 0, 0); // 🗝️ oră fixă
+
+    // Start corect: today - 29 zile
+    const start = new Date(today.getTime() - 29 * 24 * 60 * 60 * 1000);
+
+    const arr = [];
+    for (let i = 0; i < 30; i++) {
+      const d = new Date(start.getTime() + i * 24 * 60 * 60 * 1000);
+      const day = fmt(d);
+
+      const daily = totalDailyProgress[day] || {
+        workedSec: 0,
+        workedH: 0,
+        workedM: 0,
+      };
+
+      const hours = daily.workedH + daily.workedM / 60;
+
+      arr.push({
+        day,
+        label: day.slice(5),
+        sessions: 0,
+        hours,
+      });
+    }
+
+    console.log("[DEBUG] heatmapData:", arr);
+    return arr;
+  }, [totalDailyProgress]);
 
   const chartData = useMemo(() => {
-    // daily
     const daily = heatmapData.map((d) => ({
       label: d.label,
-      sessions: d.sessions,
       hours: d.hours,
     }));
-    // weekly
+
+    console.log("[DEBUG] chartData.daily:", daily);
+
     const weekMap = {};
-    heatmapData.forEach(({ day, sessions, hours }) => {
-      const dt = new Date(day),
-        dow = dt.getDay(),
-        mon = new Date(dt);
+    heatmapData.forEach(({ day, hours }) => {
+      const dt = new Date(day);
+      const dow = dt.getDay();
+      const mon = new Date(dt);
       mon.setDate(dt.getDate() - ((dow + 6) % 7));
       const wk = fmt(mon);
-      if (!weekMap[wk]) weekMap[wk] = { sessions: 0, hours: 0 };
-      weekMap[wk].sessions += sessions;
+      if (!weekMap[wk]) weekMap[wk] = { hours: 0 };
       weekMap[wk].hours += hours;
     });
     const weekly = Object.entries(weekMap)
       .sort(([a], [b]) => (a < b ? -1 : 1))
       .map(([wk, v]) => ({
         label: wk.slice(5),
-        sessions: v.sessions,
         hours: v.hours,
       }));
-    // monthly
+
     const monthMap = {};
-    heatmapData.forEach(({ day, sessions, hours }) => {
+    heatmapData.forEach(({ day, hours }) => {
       const m = day.slice(0, 7);
-      if (!monthMap[m]) monthMap[m] = { sessions: 0, hours: 0 };
-      monthMap[m].sessions += sessions;
+      if (!monthMap[m]) monthMap[m] = { hours: 0 };
       monthMap[m].hours += hours;
     });
     const monthly = Object.entries(monthMap)
       .sort(([a], [b]) => (a < b ? -1 : 1))
-      .map(([m, v]) => ({ label: m, sessions: v.sessions, hours: v.hours }));
+      .map(([m, v]) => ({ label: m, hours: v.hours }));
 
     return { daily, weekly, monthly };
   }, [heatmapData]);
 
+  const heatmapCounts = useMemo(() => {
+    const m = {};
+    for (const [day, value] of Object.entries(totalDailyProgress)) {
+      const h = value.workedH || 0;
+      const mnt = value.workedM || 0;
+      m[day] = h + mnt / 60;
+    }
+    const todayStr = fmt(new Date());
+    if (!m[todayStr]) m[todayStr] = 0;
+
+    console.log("[DEBUG] heatmapCounts:", m);
+
+    return m;
+  }, [totalDailyProgress]);
+
   // 4️⃣ Build calendarCells: blanks before/after + 30 days
   const calendarCells = useMemo(() => {
     const today = new Date();
-    const start = new Date(today);
-    start.setDate(today.getDate() - 29);
+    today.setHours(0, 0, 0, 0);
+
+    // 🔑 Start corect: folosește aritmetică pe milisecunde, nu .setDate()
+    const start = new Date(today.getTime() - 29 * 24 * 60 * 60 * 1000);
     start.setHours(0, 0, 0, 0);
 
+    // Calculează blanks înainte
     const blanksBefore = (start.getDay() + 6) % 7;
     const total = blanksBefore + 30;
     const blanksAfter = (7 - (total % 7)) % 7;
 
     const arr = [];
+
+    // Blanks înainte
     for (let i = 0; i < blanksBefore; i++) arr.push(null);
+
+    // ✅ Zile reale: de la start la today inclusiv
     for (let i = 0; i < 30; i++) {
-      const d = new Date(start);
-      d.setDate(start.getDate() + i);
+      const d = new Date(start.getTime() + i * 24 * 60 * 60 * 1000);
       arr.push(d);
     }
+
+    // Blanks după
     for (let i = 0; i < blanksAfter; i++) arr.push(null);
+
+    console.log("[DEBUG] start:", fmt(start));
+    console.log("[DEBUG] today:", fmt(today));
+    console.log(
+      "[DEBUG] calendarCells days:",
+      arr.map((d) => (d ? fmt(d) : null))
+    );
+
     return arr;
   }, []);
 
   // chart toggle & dims
-  const [period, setPeriod] = useState("daily");
-  const data = chartData[period];
+  const data = chartData.daily;
   const BAR_WIDTH = 30;
   const CHART_HEIGHT = 200;
   const maxHours = Math.max(...data.map((d) => d.hours), 1);
 
   return (
-    <div className="container mx-auto py-8 space-y-8 text-white">
-      <h2 className="text-2xl font-bold">Analytics</h2>
-
-      {/* — Period toggle — */}
-      <div className="flex space-x-2">
-        {["daily", "weekly", "monthly"].map((p) => (
-          <button
-            key={p}
-            onClick={() => setPeriod(p)}
-            className={
-              "px-4 py-2 rounded-full transition " +
-              (period === p ? "bg-indigo-600" : "bg-gray-700 hover:bg-gray-600")
-            }
-          >
-            {p.charAt(0).toUpperCase() + p.slice(1)}
-          </button>
-        ))}
-      </div>
-
+    <div className="container mx-auto py-8 space-y-3 text-white">
       {/* — Line chart of hours worked — */}
-      <div className="w-full overflow-x-auto bg-gray-800 p-4 rounded-lg">
+      <h3 className="text-lg font-semibold">Last 30 Calendar Chart Line</h3>
+      <div className="w-full overflow-x-auto bg-gray-800 p-4 rounded-lg flex justify-center">
         <svg
           width={data.length * BAR_WIDTH}
           height={CHART_HEIGHT + 30}
@@ -173,7 +195,9 @@ export default function Analytics() {
                     fontSize="10"
                     fill="#8B5CF6"
                   >
-                    {d.hours.toFixed(1)}
+                    {`${Math.floor(d.hours)}:${String(
+                      Math.round((d.hours % 1) * 60)
+                    ).padStart(2, "0")}`}
                   </text>
                 );
               })}
@@ -210,26 +234,35 @@ export default function Analytics() {
 
           {/* Calendar days */}
           {calendarCells.map((d, i) => {
-            // empty slot → render nothing
             if (!d) return <div key={i} />;
 
             const dayStr = fmt(d);
             const cnt = heatmapCounts[dayStr] || 0;
-            const alpha = Math.min(cnt / 5, 1);
+            console.log(`[DEBUG] Cell ${dayStr} → cnt:`, cnt);
+
+            const MIN_VISIBLE = 0.083;
+            let alpha = 0;
+            if (cnt > 0 && cnt < MIN_VISIBLE) {
+              alpha = 0.2;
+            } else if (cnt >= MIN_VISIBLE) {
+              alpha = Math.min(cnt / 2, 1);
+            }
+
+            const totalMinutes = Math.round(cnt * 60);
+            const workedH = Math.floor(totalMinutes / 60);
+            const workedM = totalMinutes % 60;
+            const timeStr = `${workedH}:${workedM.toString().padStart(2, "0")}`;
 
             return (
               <div
                 key={i}
                 className="h-10 flex items-center justify-center text-sm font-medium text-white"
                 style={{
-                  // only apply green when there's at least one session
                   backgroundColor:
-                    cnt > 0 ? `rgba(16,185,129,${alpha})` : "transparent",
+                    alpha > 0 ? `rgba(16,185,129,${alpha})` : "transparent",
+                  cursor: "pointer",
                 }}
-                title={`${cnt} session${cnt !== 1 ? "s" : ""}\n${(
-                  (cnt * work) /
-                  60
-                ).toFixed(2)}h`}
+                title={`Worked: ${timeStr} (H:M)`}
               >
                 {d.getDate()}
               </div>

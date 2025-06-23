@@ -34,7 +34,10 @@ function usePomodoro({ work, shortBreak, longBreak }, onExpire) {
   const [mode, setMode] = useState("work");
   const [timeLeft, setTimeLeft] = useState(work * 60);
   const intervalRef = useRef(null);
-  const expiredRef = useRef(false); // 🔑
+  const expiredRef = useRef(false);
+  const [isRunning, setIsRunning] = useState(false);
+  const deadlineRef = useRef(null);
+  const lastTickRef = useRef(Date.now());
 
   useEffect(() => {
     const sec =
@@ -44,38 +47,49 @@ function usePomodoro({ work, shortBreak, longBreak }, onExpire) {
 
   const start = () => {
     if (intervalRef.current) return;
-    expiredRef.current = false; // 🔑 resetăm flagul
+    expiredRef.current = false;
+    setIsRunning(true);
+
+    // Calculează deadline-ul corect
+    const sec =
+      mode === "work" ? work : mode === "shortBreak" ? shortBreak : longBreak;
+    deadlineRef.current = Date.now() + sec * 1000;
+
     intervalRef.current = setInterval(() => {
-      setTimeLeft((t) => {
-        if (t <= 1) {
-          clearInterval(intervalRef.current);
-          intervalRef.current = null;
+      const remaining = Math.max(
+        0,
+        Math.round((deadlineRef.current - Date.now()) / 1000)
+      );
+      setTimeLeft(remaining);
 
-          if (!expiredRef.current) {
-            expiredRef.current = true; // 🔑 protecție
-            onExpire();
-          }
+      if (remaining <= 0) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+        setIsRunning(false);
 
-          return 0;
+        if (!expiredRef.current) {
+          expiredRef.current = true;
+          onExpire();
         }
-        return t - 1;
-      });
-    }, 1000);
+      }
+    }, 500); // rulează la 500ms pentru mai fluent
   };
 
   const pause = () => {
     clearInterval(intervalRef.current);
     intervalRef.current = null;
+    setIsRunning(false);
   };
 
   const reset = () => {
     pause();
     const sec =
       mode === "work" ? work : mode === "shortBreak" ? shortBreak : longBreak;
-    setTimeLeft(sec); // ✅ corect: direct secunde
+    setTimeLeft(sec);
+    deadlineRef.current = null;
   };
 
-  return { mode, timeLeft, start, pause, reset, setMode };
+  return { mode, timeLeft, start, pause, reset, setMode, isRunning };
 }
 
 export default function Pomodoro({ selectedTask, setPage }) {
@@ -105,10 +119,8 @@ export default function Pomodoro({ selectedTask, setPage }) {
   };
 
   // --- Timer hook ---
-  const { mode, timeLeft, start, pause, reset, setMode } = usePomodoro(
-    state,
-    onExpire
-  );
+  const { mode, timeLeft, start, pause, reset, setMode, isRunning } =
+    usePomodoro(state, onExpire);
   const minutes = String(Math.floor(timeLeft / 60)).padStart(2, "0");
   const seconds = String(timeLeft % 60).padStart(2, "0");
 
@@ -155,6 +167,9 @@ export default function Pomodoro({ selectedTask, setPage }) {
 
   useEffect(() => {
     if (!selectedTask) return;
+
+    const progressKey = `${selectedTask.id}_${today}`;
+
     let initial = {
       date: today,
       task: selectedTask,
@@ -162,15 +177,16 @@ export default function Pomodoro({ selectedTask, setPage }) {
       workedH: 0,
       workedM: 0,
     };
+
     try {
-      const raw = localStorage.getItem("taskProgress");
+      const raw = localStorage.getItem("allTaskProgress");
       if (raw) {
-        const obj = JSON.parse(raw);
-        if (obj.date === today && obj.task?.id === selectedTask.id) {
-          // FIX: recalculează corect!
+        const all = JSON.parse(raw);
+        const obj = all[progressKey];
+        if (obj) {
           const sec = obj.workedSec || 0;
           initial = {
-            ...obj,
+            ...initial,
             workedSec: sec,
             workedH: Math.floor(sec / 3600),
             workedM: Math.floor((sec % 3600) / 60),
@@ -178,19 +194,85 @@ export default function Pomodoro({ selectedTask, setPage }) {
         }
       }
     } catch {}
+
     setTaskProgress(initial);
     setProgressLoaded(true);
   }, [selectedTask, today]);
+
+  const [totalProgress, setTotalProgress] = useState({
+    workedSec: 0,
+    workedH: 0,
+    workedM: 0,
+  });
+
+  useEffect(() => {
+    if (!progressLoaded) return;
+
+    try {
+      const raw = localStorage.getItem("allTaskProgress");
+      if (raw) {
+        const all = JSON.parse(raw);
+        let totalSec = 0;
+
+        for (const [key, value] of Object.entries(all)) {
+          if (key.endsWith(`_${today}`)) {
+            totalSec += value.workedSec || 0;
+          }
+        }
+
+        const newTotal = {
+          workedSec: totalSec,
+          workedH: Math.floor(totalSec / 3600),
+          workedM: Math.floor((totalSec % 3600) / 60),
+        };
+
+        setTotalProgress(newTotal);
+
+        // 👉 Salvează și în localStorage sub o cheie dedicată
+        const rawTotal = localStorage.getItem("totalDailyProgress");
+        const totalAll = rawTotal ? JSON.parse(rawTotal) : {};
+
+        totalAll[today] = newTotal;
+        localStorage.setItem("totalDailyProgress", JSON.stringify(totalAll));
+      }
+    } catch {}
+  }, [taskProgress, progressLoaded, today]);
+
   // persist progress whenever it changes
   useEffect(() => {
     if (!selectedTask || !progressLoaded) return;
-    localStorage.setItem("taskProgress", JSON.stringify(taskProgress));
-  }, [taskProgress, selectedTask]);
+
+    const progressKey = `${selectedTask.id}_${today}`;
+
+    const raw = localStorage.getItem("allTaskProgress");
+    const all = raw ? JSON.parse(raw) : {};
+
+    all[progressKey] = {
+      workedSec: taskProgress.workedSec,
+      workedH: taskProgress.workedH,
+      workedM: taskProgress.workedM,
+    };
+
+    localStorage.setItem("allTaskProgress", JSON.stringify(all));
+  }, [taskProgress, selectedTask, today, progressLoaded]);
 
   // count each second in work mode
-  const prevTimeRef = useRef(timeLeft);
   useEffect(() => {
-    if (mode === "work" && prevTimeRef.current > timeLeft && selectedTask) {
+    if (!selectedTask || !isRunning || mode !== "work") return;
+
+    // ✅ Increment imediat prima secundă
+    setTaskProgress((tp) => {
+      const newWorkedSec = tp.workedSec + 1;
+      return {
+        ...tp,
+        workedSec: newWorkedSec,
+        workedH: Math.floor(newWorkedSec / 3600),
+        workedM: Math.floor((newWorkedSec % 3600) / 60),
+      };
+    });
+
+    // ✅ Apoi continuă cu intervalul normal
+    const interval = setInterval(() => {
       setTaskProgress((tp) => {
         const newWorkedSec = tp.workedSec + 1;
         return {
@@ -200,9 +282,10 @@ export default function Pomodoro({ selectedTask, setPage }) {
           workedM: Math.floor((newWorkedSec % 3600) / 60),
         };
       });
-    }
-    prevTimeRef.current = timeLeft;
-  }, [timeLeft, mode, selectedTask]);
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [isRunning, mode, selectedTask]);
 
   // ⏳ Total daily time (in seconds)
   const dailyH = selectedTask?.dailyHours || 0;
@@ -292,13 +375,6 @@ export default function Pomodoro({ selectedTask, setPage }) {
               <button
                 onClick={() => {
                   reset();
-                  setTaskProgress({
-                    date: today,
-                    task: selectedTask,
-                    workedSec: 0,
-                    workedH: 0,
-                    workedM: 0,
-                  });
                 }}
                 className="px-6 py-2 bg-red-500 hover:bg-red-600 text-white rounded-full transition"
               >

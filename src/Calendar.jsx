@@ -1,20 +1,51 @@
 import React, { useEffect, useState } from "react";
 
-// Hook pentru a citi task-urile din localStorage
+// Hook pentru a citi și actualiza task-urile în localStorage
 function useLocalTasks() {
-  const [tasks] = useState(() => {
-    const stored = localStorage.getItem("tasks");
-    return stored ? JSON.parse(stored) : [];
+  const [tasks, setTasks] = useState(() => {
+    try {
+      const stored = localStorage.getItem("tasks");
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      localStorage.removeItem("tasks");
+      return [];
+    }
   });
-  return tasks;
+
+  // Sincronizare dacă se schimbă în alt tab
+  useEffect(() => {
+    const onStorage = (e) => {
+      if (e.key === "tasks") {
+        try {
+          setTasks(e.newValue ? JSON.parse(e.newValue) : []);
+        } catch {
+          setTasks([]);
+        }
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
+  const updateTask = (taskId, updates) => {
+    setTasks((prev) => {
+      const updated = prev.map((t) =>
+        t.id === taskId ? { ...t, ...updates } : t
+      );
+      localStorage.setItem("tasks", JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  return [tasks, updateTask];
 }
 
-// Generează matricea de săptămâni pentru o lună dată
+// Generează matricea de săptămâni pentru o lună anume
 function generateMonth(year, month) {
   const firstDay = new Date(year, month, 1);
   const lastDay = new Date(year, month + 1, 0);
   const weeks = [];
-  let current = new Date(firstDay);
+  const current = new Date(firstDay);
   current.setDate(current.getDate() - current.getDay());
 
   while (current <= lastDay || current.getDay() !== 0) {
@@ -28,8 +59,15 @@ function generateMonth(year, month) {
   return weeks;
 }
 
+// Normalizează un "YYYY-MM-DD" la același string ISO local, pentru all-day events
+function normalizeDate(dateStr) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  return dt.toISOString().split("T")[0];
+}
+
 export default function Calendar({ setPage }) {
-  const tasks = useLocalTasks();
+  const [tasks, updateTask] = useLocalTasks();
   const [events, setEvents] = useState([]);
   const [isSignedIn, setIsSignedIn] = useState(false);
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -44,46 +82,47 @@ export default function Calendar({ setPage }) {
   ];
   const SCOPES = "https://www.googleapis.com/auth/calendar";
 
+  // Încarcă GAPI și GIS la mount
   useEffect(() => {
-    // Load GAPI client
-    const script1 = document.createElement("script");
-    script1.src = "https://apis.google.com/js/api.js";
-    script1.onload = () => {
-      window.gapi.load("client", () => {
+    const s1 = document.createElement("script");
+    s1.src = "https://apis.google.com/js/api.js";
+    s1.onload = () =>
+      window.gapi.load("client", () =>
         window.gapi.client.init({
           apiKey: API_KEY,
           discoveryDocs: DISCOVERY_DOCS,
-        });
-      });
-    };
-    document.body.appendChild(script1);
+        })
+      );
+    document.body.appendChild(s1);
 
-    // Load Google Identity Services
-    const script2 = document.createElement("script");
-    script2.src = "https://accounts.google.com/gsi/client";
-    script2.onload = initGoogleAuth;
-    document.body.appendChild(script2);
+    const s2 = document.createElement("script");
+    s2.src = "https://accounts.google.com/gsi/client";
+    s2.onload = initGoogleAuth;
+    document.body.appendChild(s2);
 
     return () => {
-      document.body.removeChild(script1);
-      document.body.removeChild(script2);
+      document.body.removeChild(s1);
+      document.body.removeChild(s2);
     };
   }, []);
 
-  // Initialize GIS
+  // Initialize GIS token client
   const initGoogleAuth = () => {
     window.tokenClient = window.google.accounts.oauth2.initTokenClient({
       client_id: CLIENT_ID,
       scope: SCOPES,
       callback: (resp) => {
-        if (resp.error) return console.error(resp.error);
+        if (resp.error) {
+          console.error(resp.error);
+          return;
+        }
         setIsSignedIn(true);
         fetchGoogleEvents();
       },
     });
   };
 
-  // Fetch events from Google Calendar
+  // Fetch evenimente din Google Calendar
   const fetchGoogleEvents = () => {
     window.gapi.client.calendar.events
       .list({
@@ -100,134 +139,200 @@ export default function Calendar({ setPage }) {
 
   const handleSignIn = () => window.tokenClient.requestAccessToken();
   const handleSignOut = () => {
-    window.google.accounts.oauth2.revoke(
-      window.gapi.client.getToken().access_token
-    );
+    const token = window.gapi.client.getToken().access_token;
+    window.google.accounts.oauth2.revoke(token);
     setIsSignedIn(false);
     setEvents([]);
   };
 
-  // Normalizează data pentru a evita decalajul fusului orar
-  const normalizeDate = (dateStr) => {
-    const [year, month, day] = dateStr.split("-").map(Number);
-    const dt = new Date(year, month - 1, day);
-    return dt.toISOString().split("T")[0];
-  };
-
-  // Insert tasks to Google Calendar
+  // Adaugă task-uri ca evenimente all-day
   const addTasksToGoogleCalendar = (tasksToAdd) => {
-    tasksToAdd.forEach((task) => {
-      const date = normalizeDate(task.deadline);
-      window.gapi.client.calendar.events
-        .insert({
-          calendarId: "primary",
-          resource: {
-            summary: task.title,
-            description: task.description,
-            start: { date },
-            end: { date },
-          },
-        })
-        .then(fetchGoogleEvents)
-        .catch((err) => console.error("Error inserting event:", err));
-    });
+    const inserts = tasksToAdd
+      .filter((t) => !t.googleEventId)
+      .map((task) => {
+        const date = normalizeDate(task.deadline);
+        return window.gapi.client.calendar.events
+          .insert({
+            calendarId: "primary",
+            resource: {
+              summary: task.title,
+              description: task.description,
+              start: { date },
+              end: { date },
+            },
+          })
+          .then((res) => {
+            updateTask(task.id, { googleEventId: res.result.id });
+          })
+          .catch((err) => console.error("Error inserting event:", err));
+      });
+
+    Promise.all(inserts).then(fetchGoogleEvents);
   };
 
-  // Build calendar grid
+  // Șterge eveniment și curăță googleEventId din task
+  const handleDeleteEvent = (eventId) => {
+    window.gapi.client.calendar.events
+      .delete({ calendarId: "primary", eventId })
+      .then(() => {
+        tasks.forEach((t) => {
+          if (t.googleEventId === eventId) {
+            updateTask(t.id, { googleEventId: null });
+          }
+        });
+        setEvents((prev) => prev.filter((e) => e.id !== eventId));
+      })
+      .catch((err) => console.error("Error deleting event:", err));
+  };
+
+  // Pregătim datele pentru afișaj
   const month = currentDate.getMonth();
   const year = currentDate.getFullYear();
   const weeks = generateMonth(year, month);
-
-  // Only Google events until tasks added
   const allEvents = events.map((ev) => ({
+    id: ev.id,
     summary: ev.summary,
     date: ev.start.dateTime ? ev.start.dateTime.split("T")[0] : ev.start.date,
     labelColor: "#34D399",
   }));
 
+  const goPrev = () => setCurrentDate(new Date(year, month - 1, 1));
+  const goNext = () => setCurrentDate(new Date(year, month + 1, 1));
+
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-6">
-      {/* Header */}
-      <header className="flex justify-between items-center mb-6">
-        <h1 className="text-4xl font-bold">Calendar</h1>
-        <div className="space-x-2">
-          <button
-            onClick={() => setPage("dashboard")}
-            className="px-4 py-2 bg-gray-600 rounded-full"
-          >
-            Dashboard
-          </button>
-          {isSignedIn ? (
+    <div className="min-h-screen bg-gray-900 text-white p-4 sm:p-6 flex flex-col">
+      {/* HEADER */}
+      <header className="mb-4">
+        <div className="flex justify-between items-center">
+          {/* Stânga: Add All + Select */}
+          <div className="flex space-x-2">
             <button
-              onClick={handleSignOut}
-              className="px-4 py-2 bg-red-600 rounded-full"
+              onClick={() => addTasksToGoogleCalendar(tasks)}
+              disabled={!isSignedIn}
+              className="px-3 py-1 text-sm sm:text-base bg-green-500 rounded-full disabled:opacity-50"
             >
-              Sign Out
+              Add All
             </button>
-          ) : (
             <button
-              onClick={handleSignIn}
-              className="px-4 py-2 bg-blue-600 rounded-full"
+              onClick={() => setSelectModalOpen(true)}
+              disabled={!isSignedIn}
+              className="px-3 py-1 text-sm sm:text-base bg-purple-500 rounded-full disabled:opacity-50"
             >
-              Sign In
+              Select
             </button>
-          )}
+          </div>
+          {/* Dreapta: Sign In / Sign Out */}
+          <div>
+            {isSignedIn ? (
+              <button
+                onClick={handleSignOut}
+                className="px-3 py-1 text-sm sm:text-base bg-red-600 rounded-full"
+              >
+                Sign Out
+              </button>
+            ) : (
+              <button
+                onClick={handleSignIn}
+                className="px-3 py-1 text-sm sm:text-base bg-blue-600 rounded-full"
+              >
+                Sign In
+              </button>
+            )}
+          </div>
         </div>
       </header>
 
       {/* Month Navigation */}
-      <div className="flex justify-between items-center mb-4">
+      <div className="flex justify-center items-center mb-4 space-x-4">
         <button
-          onClick={() => setCurrentDate(new Date(year, month - 1, 1))}
-          className="px-3 py-1 bg-gray-700 rounded-full"
+          onClick={goPrev}
+          className="p-2 bg-gray-700 rounded-full hover:bg-gray-600"
+          aria-label="Previous month"
         >
-          Prev
+          {/* Chevron Left SVG */}
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className="h-5 w-5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M15 19l-7-7 7-7"
+            />
+          </svg>
         </button>
-        <h2 className="text-2xl font-semibold">
+
+        {/* Aici afișăm luna + anul */}
+        <span className="font-medium text-lg">
           {currentDate.toLocaleString("default", {
             month: "long",
             year: "numeric",
           })}
-        </h2>
+        </span>
+
         <button
-          onClick={() => setCurrentDate(new Date(year, month + 1, 1))}
-          className="px-3 py-1 bg-gray-700 rounded-full"
+          onClick={goNext}
+          className="p-2 bg-gray-700 rounded-full hover:bg-gray-600"
+          aria-label="Next month"
         >
-          Next
+          {/* Chevron Right SVG */}
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className="h-5 w-5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M9 5l7 7-7 7"
+            />
+          </svg>
         </button>
       </div>
 
-      {/* Weekday Headers */}
-      <div className="grid grid-cols-7 gap-2 mb-1">
+      {/* GRID DESKTOP */}
+      <div className="hidden sm:grid grid-cols-7 gap-2 mb-2">
         {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
           <div key={d} className="text-center font-medium">
             {d}
           </div>
         ))}
       </div>
-
-      {/* Calendar Grid */}
-      <div className="grid grid-cols-7 gap-2">
+      <div className="hidden sm:grid grid-cols-7 gap-2 flex-1 overflow-auto">
         {weeks.flat().map((day) => {
           const key = day.toISOString().split("T")[0];
           const isCurrent = day.getMonth() === month;
           const dayEvents = allEvents.filter((e) => e.date === key);
+
           return (
             <div
               key={key}
-              className={`${
-                isCurrent ? "bg-gray-800" : "bg-gray-700/40"
-              } p-2 rounded-lg h-28 flex flex-col`}
+              className={`${isCurrent ? "bg-gray-800" : "bg-gray-700/40"}
+                          p-2 rounded-lg h-28 flex flex-col`}
             >
               <div className="text-sm mb-1">{day.getDate()}</div>
               <div className="flex-1 space-y-1 overflow-y-auto">
-                {dayEvents.map((e, i) => (
+                {dayEvents.map((e) => (
                   <div
-                    key={i}
-                    className="text-xs truncate rounded px-1"
+                    key={e.id}
+                    className="text-xs truncate rounded px-1 py-1 flex justify-between items-center"
                     style={{ backgroundColor: e.labelColor }}
                   >
-                    {e.summary}
+                    <span className="flex-1">{e.summary}</span>
+                    <button
+                      onClick={() => handleDeleteEvent(e.id)}
+                      aria-label="Delete Event"
+                      className="ml-2 w-4 h-5 flex items-center justify-center text-white text-sm font-bold"
+                    >
+                      ×
+                    </button>
                   </div>
                 ))}
               </div>
@@ -236,23 +341,54 @@ export default function Calendar({ setPage }) {
         })}
       </div>
 
-      {/* Actions */}
-      <div className="mt-6 flex space-x-2">
-        <button
-          onClick={() => addTasksToGoogleCalendar(tasks)}
-          className="px-4 py-2 bg-green-500 rounded-full"
-        >
-          Add All Tasks
-        </button>
-        <button
-          onClick={() => setSelectModalOpen(true)}
-          className="px-4 py-2 bg-purple-500 rounded-full"
-        >
-          Select Tasks
-        </button>
+      {/* LISTĂ MOBIL */}
+      <div className="sm:hidden flex-1 overflow-y-auto space-y-2">
+        {weeks.flat().map((day) => {
+          const key = day.toISOString().split("T")[0];
+          const isCurrent = day.getMonth() === month;
+          const dayEvents = allEvents.filter((e) => e.date === key);
+
+          return (
+            <div
+              key={key}
+              className={`${isCurrent ? "bg-gray-800" : "bg-gray-700/40"}
+                          p-3 rounded-lg flex flex-col`}
+            >
+              <div className="flex justify-between items-center mb-2">
+                <span className="font-semibold">{day.getDate()}</span>
+                <span className="text-xs opacity-70">
+                  {day.toLocaleString("default", { weekday: "short" })}
+                </span>
+              </div>
+
+              {dayEvents.length ? (
+                <ul className="space-y-1">
+                  {dayEvents.map((e) => (
+                    <li
+                      key={e.id}
+                      className="text-sm truncate rounded px-2 py-1 flex justify-between items-center"
+                      style={{ backgroundColor: e.labelColor }}
+                    >
+                      <span className="flex-1">{e.summary}</span>
+                      <button
+                        onClick={() => handleDeleteEvent(e.id)}
+                        aria-label="Delete Event"
+                        className="ml-2 text-white font-bold"
+                      >
+                        ×
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-xs opacity-50">No events</p>
+              )}
+            </div>
+          );
+        })}
       </div>
 
-      {/* Modal Select Tasks */}
+      {/* SELECT TASKS MODAL */}
       {isSelectModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
           <div className="bg-gray-800 rounded-lg w-full max-w-5xl">

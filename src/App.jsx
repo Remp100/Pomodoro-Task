@@ -27,8 +27,10 @@ const navItems = [
 ];
 
 function Navbar({ page, setPage }) {
-  // Persistăm darkMode în localStorage
   const [menuOpen, setMenuOpen] = useState(false);
+
+  const otherPages = navItems.filter((item) => item.key !== page);
+  const currentPage = navItems.find((item) => item.key === page);
 
   return (
     <header className="max-w-6xl mx-auto bg-gray-800/90 backdrop-blur shadow sticky top-[3px] z-50 rounded-2xl">
@@ -38,7 +40,9 @@ function Navbar({ page, setPage }) {
             Pomodoro Task Manager
           </h1>
         </div>
-        <nav className="mt-4 flex justify-center flex-wrap gap-4 w-full">
+
+        {/* ✅ NAVBAR DESKTOP */}
+        <nav className="mt-4 hidden md:flex justify-center flex-wrap gap-4 w-full">
           {navItems.map(({ key, label, emoji }) => (
             <button
               key={key}
@@ -47,36 +51,47 @@ function Navbar({ page, setPage }) {
                 `flex items-center space-x-2 py-2 px-4 rounded-full transition-all duration-200 ` +
                 (page === key
                   ? "bg-blue-500 text-white shadow-lg"
-                  : "bg-gray-100 bg-gray-700 text-white-700  hover:bg-gray-200 hover:bg-gray-600")
+                  : "bg-gray-700 text-white hover:bg-gray-600")
               }
             >
               <span className="text-lg">{emoji}</span>
               <span className="font-medium">{label}</span>
             </button>
           ))}
+        </nav>
+
+        {/* ✅ NAVBAR MOBIL */}
+        <nav className="mt-4 flex md:hidden justify-center flex-wrap gap-4 w-full">
+          {/* pagina curentă */}
+          <button
+            key={currentPage.key}
+            className="flex items-center space-x-2 py-2 px-4 rounded-full bg-blue-500 text-white shadow-lg"
+          >
+            <span className="text-lg">{currentPage.emoji}</span>
+            <span className="font-medium">{currentPage.label}</span>
+          </button>
+
+          {/* ☰ buton */}
           <button
             onClick={() => setMenuOpen((prev) => !prev)}
-            className="md:hidden flex items-center justify-center w-10 h-10 rounded-full bg-gray-100 bg-gray-700 hover:bg-gray-200 hover:bg-gray-600 transition"
+            className="flex items-center justify-center w-10 h-10 rounded-full bg-gray-700 hover:bg-gray-600 transition"
             aria-label="Toggle Menu"
           >
             <span className="text-2xl">{menuOpen ? "✕" : "☰"}</span>
           </button>
         </nav>
+
+        {/* ✅ MENIU MOBIL extins */}
         {menuOpen && (
-          <div className="md:hidden mt-2 flex flex-col items-center gap-2">
-            {navItems.map(({ key, label, emoji }) => (
+          <div className="mt-2 flex flex-col items-start ml-20 gap-2 md:hidden">
+            {otherPages.map(({ key, label, emoji }) => (
               <button
                 key={key}
                 onClick={() => {
                   setPage(key);
                   setMenuOpen(false);
                 }}
-                className={
-                  `flex items-center space-x-2 py-2 px-4 rounded-full transition-all duration-200 ` +
-                  (page === key
-                    ? "bg-blue-500 text-white"
-                    : "bg-gray-100 bg-gray-700 text-gray-700 text-gray-300 hover:bg-gray-200 hover:bg-gray-600")
-                }
+                className="flex items-center space-x-2 py-2 px-4 rounded-full bg-gray-700 text-white hover:bg-gray-600 transition-all duration-200"
               >
                 <span className="text-lg">{emoji}</span>
                 <span className="font-medium">{label}</span>

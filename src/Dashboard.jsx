@@ -43,6 +43,14 @@ function getDeadlineColor(deadline) {
 export default function Dashboard({ setPage, setSelectedTask }) {
   // tasks state
   const [storedTasks, setStoredTasks] = useLocalStorage("tasks", []);
+  const [allTaskProgress, setAllTaskProgress] = useLocalStorage(
+    "allTaskProgress",
+    {}
+  );
+  const [selectedTaskLS, setSelectedTaskLS] = useLocalStorage(
+    "selectedTask",
+    null
+  );
   const [tasks, dispatch] = useReducer(taskReducer, storedTasks);
   useEffect(() => setStoredTasks(tasks), [tasks]);
 
@@ -55,6 +63,8 @@ export default function Dashboard({ setPage, setSelectedTask }) {
   const [estimatedFinish, setEstimatedFinish] = useState("");
   const [deadline, setDeadline] = useState("");
   const [dailyMinutes, setDailyMinutes] = useState("");
+  const [editingTaskId, setEditingTaskId] = useState(null);
+  const [selectedTask, setSelectedTaskState] = useState(selectedTaskLS);
 
   const today = new Date().toISOString().split("T")[0];
 
@@ -69,12 +79,81 @@ export default function Dashboard({ setPage, setSelectedTask }) {
   const dragItem = useRef();
   const dragOverItem = useRef();
 
+  const onDragStart = (_, index) => {
+    dragItem.current = index;
+  };
+
+  const onDragEnter = (_, index) => {
+    dragOverItem.current = index;
+  };
+
+  const onDragEnd = () => {
+    const list = Array.from(tasks);
+    const draggedItemContent = list.splice(dragItem.current, 1)[0];
+    list.splice(dragOverItem.current, 0, draggedItemContent);
+
+    dispatch({ type: "REORDER", payload: list });
+
+    dragItem.current = null;
+    dragOverItem.current = null;
+  };
+
+  const isValid = () => {
+    return (
+      title.trim() !== "" &&
+      description.trim() !== "" &&
+      labelName.trim() !== "" &&
+      deadline.trim() !== ""
+    );
+  };
+
+  const resetForm = () => {
+    setTitle("");
+    setDescription("");
+    setLabelName("");
+    setLabelColor("#34D399");
+    setDailyHours("");
+    setDailyMinutes("");
+    setEstimatedFinish("");
+    setDeadline("");
+    setEditingTaskId(null); // foarte important!
+  };
+
   // add new task
   const addTask = () => {
-    if (!title.trim()) return;
-    dispatch({
-      type: "ADD",
-      payload: {
+    if (!isValid()) return;
+
+    if (editingTaskId) {
+      // UPDATE
+      const updatedTasks = tasks.map((task) =>
+        task.id === editingTaskId
+          ? {
+              ...task,
+              title,
+              description,
+              labelName,
+              labelColor,
+              dailyHours: dailyHours || null,
+              dailyMinutes: dailyMinutes || null,
+              estimatedFinish: estimatedFinish || null,
+              deadline: deadline || null,
+            }
+          : task
+      );
+      dispatch({ type: "REORDER", payload: updatedTasks });
+
+      // 🔑 Update selectedTask și LS dacă task-ul editat e cel selectat
+      if (selectedTask && selectedTask.id === editingTaskId) {
+        const updated = updatedTasks.find((t) => t.id === editingTaskId);
+        setSelectedTaskState(updated);
+        setSelectedTask(updated);
+        setSelectedTaskLS(updated);
+      }
+
+      setEditingTaskId(null);
+    } else {
+      // ADD nou
+      const newTask = {
         id: Date.now(),
         title,
         description,
@@ -84,51 +163,39 @@ export default function Dashboard({ setPage, setSelectedTask }) {
         dailyMinutes: dailyMinutes || null,
         estimatedFinish: estimatedFinish || null,
         deadline: deadline || null,
-      },
-    });
-    // reset form
-    setTitle("");
-    setDescription("");
-    setLabelName("");
-    setLabelColor("#34D399");
-    setDailyHours("");
-    setDailyMinutes("");
-    setEstimatedFinish("");
-    setDeadline("");
+      };
+      dispatch({ type: "ADD", payload: newTask });
+    }
+
+    resetForm();
   };
 
-  // remove a task
   const removeTask = (id) => {
     dispatch({ type: "REMOVE", payload: id });
-  };
 
-  // start a task → navigate to Pomodoro
-  const startTask = () => {
-    setPage("pomodoro");
-  };
+    // 🔑 Șterge progresul din allTaskProgress
+    const updatedProgress = { ...allTaskProgress };
+    Object.keys(updatedProgress).forEach((key) => {
+      if (key.startsWith(`${id}_`)) {
+        delete updatedProgress[key];
+      }
+    });
+    setAllTaskProgress(updatedProgress);
 
-  // drag handlers
-  const onDragStart = (_, index) => {
-    dragItem.current = index;
-  };
-  const onDragEnter = (_, index) => {
-    dragOverItem.current = index;
-  };
-  const onDragEnd = () => {
-    const list = Array.from(tasks);
-    const dragged = list.splice(dragItem.current, 1)[0];
-    list.splice(dragOverItem.current, 0, dragged);
-    dispatch({ type: "REORDER", payload: list });
-    dragItem.current = null;
-    dragOverItem.current = null;
+    // 🔑 Dacă ștergi task-ul selectat => reset
+    if (selectedTask && selectedTask.id === id) {
+      setSelectedTaskState(null);
+      setSelectedTask(null);
+      setSelectedTaskLS(null);
+    }
   };
 
   return (
     <div className="container bg-gray-900">
       <div className="container mx-auto py-8 space-y-8">
         {/* Toolbar */}
-        <div className="flex justify-between items-center">
-          <div>
+        <div className="flex flex-wrap justify-between items-center gap-4">
+          <div className="flex flex-wrap gap-2">
             <button
               onClick={() => setViewMode("label")}
               className={`px-4 py-2 rounded-full transition ${
@@ -221,7 +288,9 @@ export default function Dashboard({ setPage, setSelectedTask }) {
                     </button>
                     <button
                       onClick={() => {
+                        setSelectedTaskState(t);
                         setSelectedTask(t);
+                        setSelectedTaskLS(t);
                         setPage("pomodoro");
                       }}
                       className="px-4 py-2 bg-green-400 hover:bg-green-500 rounded-lg text-sm transition"
@@ -299,16 +368,26 @@ export default function Dashboard({ setPage, setSelectedTask }) {
                 max="59"
               />
               <input
-                type="date"
+                type={estimatedFinish ? "date" : "text"}
                 value={estimatedFinish}
+                onFocus={(e) => (e.target.type = "date")}
+                onBlur={(e) => {
+                  if (!e.target.value) e.target.type = "text";
+                }}
                 onChange={(e) => setEstimatedFinish(e.target.value)}
+                placeholder="Estimated date for finishing the task (optional)"
                 className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500 w-full"
                 min={today}
               />
               <input
-                type="date"
+                type={deadline ? "date" : "text"}
                 value={deadline}
+                onFocus={(e) => (e.target.type = "date")}
+                onBlur={(e) => {
+                  if (!e.target.value) e.target.type = "text";
+                }}
                 onChange={(e) => setDeadline(e.target.value)}
+                placeholder="Deadline for finishing the task"
                 className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500 w-full"
                 min={today}
               />
@@ -317,7 +396,10 @@ export default function Dashboard({ setPage, setSelectedTask }) {
             {/* Action bar */}
             <div className="border-t border-gray-200 dark:border-gray-700 px-6 py-4 flex justify-between">
               <button
-                onClick={() => setIsCreateOpen(false)}
+                onClick={() => {
+                  resetForm();
+                  setIsCreateOpen(false);
+                }}
                 className="text-white hover:text-white transition"
               >
                 Cancel
@@ -325,11 +407,16 @@ export default function Dashboard({ setPage, setSelectedTask }) {
               <button
                 onClick={() => {
                   addTask();
-                  setIsCreateOpen(false);
+                  if (isValid()) setIsCreateOpen(false);
                 }}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition"
+                disabled={!isValid()}
+                className={`px-4 py-2 ${
+                  isValid()
+                    ? "bg-indigo-600 hover:bg-indigo-700 cursor-pointer"
+                    : "bg-gray-400 cursor-not-allowed"
+                } text-white rounded-lg transition`}
               >
-                Create Task
+                {editingTaskId ? "Update Task" : "Create Task"}
               </button>
             </div>
           </div>
@@ -337,7 +424,7 @@ export default function Dashboard({ setPage, setSelectedTask }) {
       )}
       {/* ==== VIEW TASK MODAL ==== */}
       {modalTask && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black bg-opacity-30 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30 backdrop-blur-sm">
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg w-11/12 max-w-md overflow-hidden">
             <div className="p-4 border-b dark:border-gray-700">
               <h2 className="text-xl font-bold">{modalTask.title}</h2>
@@ -371,7 +458,7 @@ export default function Dashboard({ setPage, setSelectedTask }) {
                 </p>
               )}
             </div>
-            <div className="p-4 border-t flex justify-end gap-3 dark:border-gray-700">
+            <div className="p-4 border-t flex justify-center gap-4 dark:border-gray-700">
               <button
                 onClick={() => setModalTask(null)}
                 className="px-3 py-1 bg-gray-200 dark:bg-gray-700 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition"
@@ -381,6 +468,7 @@ export default function Dashboard({ setPage, setSelectedTask }) {
               <button
                 onClick={() => {
                   setSelectedTask(modalTask);
+                  setSelectedTaskLS(modalTask);
                   setPage("pomodoro");
                   setModalTask(null);
                 }}
@@ -396,6 +484,25 @@ export default function Dashboard({ setPage, setSelectedTask }) {
                 className="px-3 py-1 bg-red-500 text-white rounded-lg hover:bg-red-600 transition"
               >
                 End
+              </button>
+              <button
+                onClick={() => {
+                  // Populează formularul cu datele task-ului
+                  setTitle(modalTask.title);
+                  setDescription(modalTask.description);
+                  setLabelName(modalTask.labelName);
+                  setLabelColor(modalTask.labelColor || "#34D399");
+                  setDailyHours(modalTask.dailyHours || "");
+                  setDailyMinutes(modalTask.dailyMinutes || "");
+                  setEstimatedFinish(modalTask.estimatedFinish || "");
+                  setDeadline(modalTask.deadline || "");
+                  setEditingTaskId(modalTask.id); // ADĂUGĂ ASTA!
+                  setModalTask(null); // închide modalul de View
+                  setIsCreateOpen(true); // deschide modalul de Create/Edit
+                }}
+                className="px-3 py-1 bg-yellow-400 text-gray-900 rounded-lg hover:bg-yellow-500 transition"
+              >
+                Edit
               </button>
             </div>
           </div>
