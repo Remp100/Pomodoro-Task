@@ -3,7 +3,6 @@ import React, { useState, useEffect, useMemo } from "react";
 export default function Analytics() {
   const totalDailyProgress =
     JSON.parse(localStorage.getItem("totalDailyProgress")) || {};
-  console.log("[DEBUG] totalDailyProgress:", totalDailyProgress);
 
   const fmt = (d) => {
     const year = d.getFullYear();
@@ -39,7 +38,6 @@ export default function Analytics() {
       });
     }
 
-    console.log("[DEBUG] heatmapData:", arr);
     return arr;
   }, [totalDailyProgress]);
 
@@ -48,8 +46,6 @@ export default function Analytics() {
       label: d.label,
       hours: d.hours,
     }));
-
-    console.log("[DEBUG] chartData.daily:", daily);
 
     const weekMap = {};
     heatmapData.forEach(({ day, hours }) => {
@@ -91,8 +87,6 @@ export default function Analytics() {
     const todayStr = fmt(new Date());
     if (!m[todayStr]) m[todayStr] = 0;
 
-    console.log("[DEBUG] heatmapCounts:", m);
-
     return m;
   }, [totalDailyProgress]);
 
@@ -117,13 +111,6 @@ export default function Analytics() {
     }
 
     for (let i = 0; i < blanksAfter; i++) arr.push(null);
-
-    console.log("[DEBUG] start:", fmt(start));
-    console.log("[DEBUG] today:", fmt(today));
-    console.log(
-      "[DEBUG] calendarCells days:",
-      arr.map((d) => (d ? fmt(d) : null))
-    );
 
     return arr;
   }, []);
@@ -228,7 +215,6 @@ export default function Analytics() {
 
             const dayStr = fmt(d);
             const cnt = heatmapCounts[dayStr] || 0;
-            console.log(`[DEBUG] Cell ${dayStr} → cnt:`, cnt);
 
             const MIN_VISIBLE = 0.083;
             let alpha = 0;
